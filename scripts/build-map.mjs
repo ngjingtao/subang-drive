@@ -104,6 +104,15 @@ const ROAD_WIDTH = {
 }
 
 const AREA_RULES = [
+  ['amenity', 'school', 'school'],
+  ['amenity', 'university', 'school'],
+  ['amenity', 'college', 'school'],
+  ['amenity', 'kindergarten', 'school'],
+  ['amenity', 'fuel', 'fuel'],
+  ['amenity', 'place_of_worship', 'worship'],
+  ['amenity', 'hospital', 'hospital'],
+  ['leisure', 'stadium', 'stadium'],
+  ['leisure', 'sports_centre', 'sports'],
   ['landuse', 'residential', 'residential'],
   ['landuse', 'commercial', 'commercial'],
   ['landuse', 'retail', 'retail'],
@@ -121,8 +130,6 @@ const AREA_RULES = [
   ['leisure', 'pitch', 'pitch'],
   ['leisure', 'playground', 'playground'],
   ['leisure', 'swimming_pool', 'water'],
-  ['leisure', 'stadium', 'pitch'],
-  ['leisure', 'sports_centre', 'pitch'],
   ['leisure', 'recreation_ground', 'park'],
   ['natural', 'water', 'water'],
   ['natural', 'wood', 'wood'],
@@ -166,6 +173,40 @@ const BUILDING_HEIGHT = {
   school: 10, university: 12, mosque: 9, church: 9, temple: 9, kindergarten: 6,
   hospital: 16, hotel: 22, office: 20, stadium: 15, roof: 4.5, garage: 3.2,
   guardhouse: 3.2, yes: 7, construction: 6, manufacture: 8, service: 4,
+}
+
+const POI_AMENITY = new Set([
+  'fuel', 'school', 'university', 'college', 'kindergarten',
+  'hospital', 'clinic', 'police', 'fire_station', 'marketplace',
+  'bus_station', 'bank', 'restaurant', 'cafe', 'place_of_worship',
+  'community_centre', 'library', 'post_office', 'townhall', 'pharmacy',
+])
+
+function poiKind(tags) {
+  if (tags.amenity === 'fuel') return 'fuel'
+  if (tags.amenity === 'place_of_worship') return tags.religion === 'muslim' ? 'mosque' : 'worship'
+  if (POI_AMENITY.has(tags.amenity)) {
+    if (['school', 'university', 'college', 'kindergarten'].includes(tags.amenity)) return 'school'
+    if (tags.amenity === 'clinic') return 'hospital'
+    return tags.amenity
+  }
+  if (tags.building === 'school' || tags.building === 'kindergarten' || tags.building === 'university' || tags.building === 'college') return 'school'
+  if (tags.building === 'mosque' || tags.building === 'musalla') return 'mosque'
+  if (tags.building === 'hospital') return 'hospital'
+  if (tags.leisure === 'stadium') return 'stadium'
+  if (tags.leisure === 'sports_centre') return 'sports'
+  if (tags.shop === 'supermarket' || tags.shop === 'department_store') return 'supermarket'
+  if (tags.man_made === 'works' || (tags.building === 'industrial' && (tags.name || tags.operator))) return 'factory'
+  if (tags.building === 'retail' && tags.name) return 'shop'
+  return ''
+}
+
+function poiName(tags) {
+  return tags.name || tags.brand || tags.operator || ''
+}
+
+function poiBrand(tags) {
+  return tags.brand || tags.operator || ''
 }
 
 function buildingHeight(tags) {
@@ -272,6 +313,8 @@ const areas = []
 const trees = []
 const signals = []
 const busStops = []
+const pois = []
+const poiSeen = new Set()
 
 const ROAD_TYPES = new Set(Object.keys(ROAD_WIDTH))
 const PATH_TYPES = new Set(['footway', 'path', 'steps', 'pedestrian', 'cycleway', 'corridor'])
@@ -280,6 +323,20 @@ const roadNodeUse = new Map()
 for (const way of ways) {
   if (!ROAD_TYPES.has(way.tags.highway)) continue
   for (const ref of way.refs) roadNodeUse.set(ref, (roadNodeUse.get(ref) || 0) + 1)
+}
+
+function addPoi(x, z, tags) {
+  const kind = poiKind(tags)
+  if (!kind) return
+  const key = `${kind}:${Math.round(x / 25)}:${Math.round(z / 25)}`
+  if (poiSeen.has(key)) return
+  poiSeen.add(key)
+  const poi = { x: round2(x), z: round2(z), k: kind }
+  const name = poiName(tags)
+  const brand = poiBrand(tags)
+  if (name) poi.n = name
+  if (brand && brand !== name) poi.br = brand
+  pois.push(poi)
 }
 
 
@@ -346,7 +403,20 @@ for (const way of ways) {
     const area = Math.abs(signedArea(pts))
     if (area < 8) continue
     const { h, base } = buildingHeight(tags)
-    buildings.push({ h: round2(h), b: round2(base), k: tags.building, p: pts })
+    const extra = {}
+    if (tags.name) extra.n = tags.name
+    if (tags.amenity) extra.a = tags.amenity
+    else if (tags.shop) extra.a = tags.shop
+    else if (tags.man_made) extra.a = tags.man_made
+    if (tags.brand) extra.br = tags.brand
+    buildings.push({ h: round2(h), b: round2(base), k: tags.building, p: pts, ...extra })
+    // A named building also carries a POI so schools, workshops and shops
+    // can get an entrance sign even when their area polygon is missing.
+    if (tags.name || tags.amenity || tags.shop || tags.man_made) {
+      let cx = 0, cz = 0
+      for (const [x, z] of pts) { cx += x; cz += z }
+      addPoi(cx / pts.length, cz / pts.length, tags)
+    }
     continue
   }
 
@@ -364,7 +434,16 @@ for (const way of ways) {
       if (pts.length < 3) continue
       const area = Math.abs(signedArea(pts))
       if (area < 25) continue
-      areas.push({ k: kind, p: pts })
+      const extra = {}
+      if (tags.name) extra.n = tags.name
+      if (tags.sport) extra.s = tags.sport
+      if (tags.surface) extra.sf = tags.surface
+      if (tags.amenity) extra.a = tags.amenity
+      if (tags.man_made) extra.a = tags.man_made
+      areas.push({ k: kind, p: pts, ...extra })
+      let acx = 0, acz = 0
+      for (const [x, z] of pts) { acx += x; acz += z }
+      addPoi(acx / pts.length, acz / pts.length, tags)
     }
   }
 
@@ -392,6 +471,7 @@ for (const node of taggedNodes) {
   if (tags.natural === 'tree') trees.push([x, z, 0.85 + ((Math.abs(Math.sin(x * 12.9898 + z * 78.233)) * 100) % 1) * 0.6])
   if (tags.highway === 'traffic_signals') signals.push([x, z])
   if (tags.highway === 'bus_stop') busStops.push([x, z, tags.name || ''])
+  addPoi(x, z, tags)
 }
 
 // Rough bounds of the extract in local metres.
@@ -514,6 +594,7 @@ const out = {
   trees,
   signals,
   busStops: busStops.slice(0, 120),
+  pois: pois.slice(0, 2000),
 }
 
 fs.mkdirSync(path.dirname(OUT), { recursive: true })
@@ -521,5 +602,5 @@ const json = JSON.stringify(out)
 fs.writeFileSync(OUT, json)
 console.log('Wrote', path.relative(ROOT, OUT), (json.length / 1024 / 1024).toFixed(2), 'MB')
 console.log(`  roads: ${roads.length}, buildings: ${buildings.length}, areas: ${areas.length}, paths: ${paths.length}`)
-console.log(`  trees: ${trees.length}, junctions: ${junctions.length}, signals: ${signals.length}, bus stops: ${busStops.length}`)
+console.log(`  trees: ${trees.length}, junctions: ${junctions.length}, signals: ${signals.length}, bus stops: ${busStops.length}, POIs: ${pois.length}`)
 console.log(`  spawn: "${spawn.name}" at ${spawn.x.toFixed(0)},${spawn.z.toFixed(0)} (${spawn.neighbours ?? '?'} neighbours)`)

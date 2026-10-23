@@ -45,6 +45,12 @@ const KIND_COLORS = {
   playground: '#a68a62',
   parking: '#5b5e5d',
   water: '#3b6b80',
+  school: '#8ba076',
+  fuel: '#b8b3a8',
+  worship: '#aa9f87',
+  hospital: '#b9c2b8',
+  stadium: '#6f8a4d',
+  sports: '#748e54',
 }
 
 const BUILDING_COLORS = [
@@ -641,6 +647,140 @@ function addShopFront(batch, frame, near, seed) {
   addDetailBox(batch, sx, sy, sz, frontage - 0.5, 0.62, 0.1, yaw, '#e1dbcd')
   // A darker frame line under the sign board.
   addDetailBox(batch, sx, 3.48, sz, frontage - 0.5, 0.07, 0.12, yaw, '#4a4a46')
+}
+
+function addFootballField(batch, area) {
+  if (area.p.length < 3) return
+  const frame = footprintFrame(area.p, null)
+  const { ux, uz, fx, fz, u0, u1, v0, v1 } = frame
+  const uLen = u1 - u0
+  const vLen = v1 - v0
+  if (uLen < 5 || vLen < 3.5) return
+
+  const sport = String(area.s || '').toLowerCase()
+  const isSoccer = /soccer|football|futsal|hockey/.test(sport) || area.k === 'stadium'
+  const isCourt = /basketball|tennis|badminton|sepak|volleyball|multi|baseball/.test(sport)
+  if (!isSoccer && !isCourt && sport) return
+  if (!isSoccer && !isCourt && !sport) {
+    // An unnamed pitch is almost always a neighbourhood football/futsal field.
+  }
+
+  const lengthAlongU = uLen >= vLen
+  const length = lengthAlongU ? uLen : vLen
+  const width = lengthAlongU ? vLen : uLen
+  if (length < 5 || width < 3) return
+  const lx = lengthAlongU ? ux : fx
+  const lz = lengthAlongU ? uz : fz
+  const wx = lengthAlongU ? fx : ux
+  const wz = lengthAlongU ? fz : uz
+  const cx = ux * ((u0 + u1) / 2) + fx * ((v0 + v1) / 2)
+  const cz = uz * ((u0 + u1) / 2) + fz * ((v0 + v1) / 2)
+  const yaw = Math.atan2(-lz, lx)
+  const local = (l, w, y) => [cx + lx * l + wx * w, y, cz + lz * l + wz * w]
+  const boxLocal = (l, w, y, along, across, height, color) => {
+    const [x, yy, z] = local(l, w, y)
+    addDetailBox(batch, x, yy, z, along, height, across, yaw, color)
+  }
+
+  const courtCols = {
+    basketball: '#a96f52',
+    tennis: '#4f7f61',
+    badminton: '#3f7064',
+    multi: '#567f78',
+    sepak_takraw: '#417b57',
+    volleyball: '#ae8054',
+    baseball: '#8a7d57',
+    hockey: '#4f7b54',
+  }
+  const grass = isSoccer ? '#4d7b37' : (courtCols[sport.split(';')[0]] || '#557a3c')
+  boxLocal(0, 0, 0.035, length - 0.6, width - 0.6, 0.025, grass)
+
+  const inset = 0.85
+  const halfL = length / 2 - inset
+  const halfW = width / 2 - inset
+  const lineTh = 0.12
+  const lineY = 0.08
+  const white = '#e8e7df'
+  // boundary
+  boxLocal(0, -halfW, lineY, halfL * 2, lineTh, 0.025, white)
+  boxLocal(0, halfW, lineY, halfL * 2, lineTh, 0.025, white)
+  boxLocal(-halfL, 0, lineY, lineTh, halfW * 2, 0.025, white)
+  boxLocal(halfL, 0, lineY, lineTh, halfW * 2, 0.025, white)
+  // halfway line
+  boxLocal(0, 0, lineY, lineTh, halfW * 2, 0.025, white)
+
+  if (isSoccer) {
+    const centerR = Math.min(3.0, width * 0.18)
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2
+      boxLocal(Math.cos(a) * centerR, Math.sin(a) * centerR, lineY, 0.38, 0.1, 0.025, white)
+    }
+    boxLocal(0, 0, lineY + 0.002, 0.28, 0.28, 0.025, white)
+    const penDepth = Math.min(16.5, halfL * 0.42)
+    const penHalf = Math.min(halfW * 0.62, 20.16 / 2)
+    for (const side of [-1, 1]) {
+      const end = side * halfL
+      const back = end - side * penDepth
+      boxLocal(back, 0, lineY, lineTh, penHalf * 2, 0.025, white)
+      boxLocal((end + back) / 2, -penHalf, lineY, penDepth, lineTh, 0.025, white)
+      boxLocal((end + back) / 2, penHalf, lineY, penDepth, lineTh, 0.025, white)
+      // goal
+      const goalHalf = sport.includes('futsal') ? 1.5 : 3.66
+      boxLocal(end, -goalHalf, 1.24, 0.12, 0.12, 2.42, white)
+      boxLocal(end, goalHalf, 1.24, 0.12, 0.12, 2.42, white)
+      boxLocal(end, 0, 2.42, 0.12, goalHalf * 2, 0.12, white)
+    }
+    // low perimeter fence
+    const fenceY = 0.62
+    const fenceH = 1.06
+    const fenceCol = '#4e5f4e'
+    const fl = halfL + 1.2
+    const fw = halfW + 1.2
+    boxLocal(0, -fw, fenceY, fl * 2, 0.08, fenceH, fenceCol)
+    boxLocal(0, fw, fenceY, fl * 2, 0.08, fenceH, fenceCol)
+    boxLocal(-fl, 0, fenceY, 0.08, fw * 2, fenceH, fenceCol)
+    boxLocal(fl, 0, fenceY, 0.08, fw * 2, fenceH, fenceCol)
+    for (const [ll, ww] of [[-fl, -fw], [-fl, fw], [fl, -fw], [fl, fw]]) {
+      boxLocal(ll, ww, 0.55, 0.18, 0.18, 1.2, fenceCol)
+    }
+  } else {
+    // Simple court markings for basketball/tennis/badminton/multi courts.
+    const centerCircleR = Math.min(1.8, width * 0.16)
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2
+      boxLocal(Math.cos(a) * centerCircleR, Math.sin(a) * centerCircleR, lineY, 0.22, 0.08, 0.025, white)
+    }
+  }
+}
+
+function cleanLabel(value) {
+  return String(value || '')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .trim()
+}
+
+function fuelBrandStyle(name) {
+  const n = String(name || '').toLowerCase()
+  if (n.includes('shell')) return { main: '#f4c400', accent: '#d71920', dark: '#1d1d1b', light: '#fff4b0' }
+  if (n.includes('petronas')) return { main: '#00a19c', accent: '#0a3f3c', dark: '#092e2b', light: '#e0fbf4' }
+  if (n.includes('bhp')) return { main: '#007a3d', accent: '#f4c400', dark: '#153b26', light: '#f8f0c0' }
+  if (n.includes('caltex')) return { main: '#0a4f9e', accent: '#d71920', dark: '#082d57', light: '#e5efff' }
+  if (n.includes('petron')) return { main: '#d71920', accent: '#f4c400', dark: '#3a0d0d', light: '#ffe6d9' }
+  return { main: '#b53a30', accent: '#f0d28a', dark: '#33201b', light: '#f5e8d2' }
+}
+
+function signColorFor(kind) {
+  if (kind === 'school') return { bg: '#164b8b', fg: '#ffffff', accent: '#ffd24a', sub: 'SEKOLAH' }
+  if (kind === 'factory') return { bg: '#30383a', fg: '#f5f1e6', accent: '#f0a23a', sub: 'FACTORY' }
+  if (kind === 'mosque' || kind === 'worship') return { bg: '#0d5a45', fg: '#ffffff', accent: '#f0d37a', sub: 'MASJID' }
+  if (kind === 'hospital') return { bg: '#9a1d1d', fg: '#ffffff', accent: '#ffe0d6', sub: 'KLINIK' }
+  if (kind === 'supermarket') return { bg: '#b21f2d', fg: '#ffffff', accent: '#ffe08a', sub: 'PASAR RAYA' }
+  if (kind === 'restaurant' || kind === 'cafe') return { bg: '#5a3528', fg: '#fff4dd', accent: '#f4b454', sub: 'RESTORAN' }
+  return { bg: '#27343a', fg: '#ffffff', accent: '#ffc857', sub: 'SUBANG JAYA' }
 }
 
 function addParapet(batch, b, frame, wallHex) {
@@ -1245,7 +1385,7 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
-         float wall = 1.0 - smoothstep(0.42, 0.72, abs(vWNormal.y));
+         float wall = 1.0 - smoothstep(0.28, 0.55, abs(vWNormal.y));
          float floorH = 3.05;
          float fy = fract(vWPos.y / floorH);
          float floorIdx = floor(vWPos.y / floorH);
@@ -1285,6 +1425,14 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
          doorFrame *= step(0.135, du) * step(du, 0.325) * step(vWPos.y, 2.35);
          win *= 1.0 - door;
 
+         // Factories and warehouses get a large roller-shutter door on the
+         // road-facing ground floor instead of domestic windows.
+         float indFx = fract((vWPos.x + vWPos.z) / 7.5 + vSeed * 3.1);
+         float indDoor = isInd * frontness * ground;
+         indDoor *= step(0.035, fy) * step(fy, 0.90);
+         indDoor *= step(0.24, indFx) * step(indFx, 0.76);
+         win *= 1.0 - indDoor;
+
          float winW2 = winW + 0.012;
          float winOuter = step(0.5 - winW2, fx) * step(fx, 0.5 + winW2);
          winOuter *= step(y0 - 0.012, fy) * step(fy, y1 + 0.012);
@@ -1312,6 +1460,8 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
          diffuseColor.rgb = mix(diffuseColor.rgb, shopCol, shopGlass * 0.92);
          diffuseColor.rgb = mix(diffuseColor.rgb, frameCol, doorFrame * 0.55);
          diffuseColor.rgb = mix(diffuseColor.rgb, doorCol, door * 0.96);
+         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.23, 0.26, 0.27), indDoor * 0.90);
+         diffuseColor.rgb *= 1.0 - indDoor * 0.12 * step(0.5, fract(vWPos.y * 5.0));
 
          // Slightly weather the paint, especially near the ground.
          float grain = sin(vWPos.x * 2.7 + vWPos.z * 3.3 + vWPos.y * 5.1) * 0.012;
@@ -1423,6 +1573,29 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
       }
       buildingChunks.set(key, chunk)
     }
+    // OSM building=roof is an open canopy, not a solid block. Rendering it as
+    // walls hides the pumps and courtyards underneath (especially at petrol
+    // stations), so keep only a thin slab and its columns.
+    if (b.k === 'roof') {
+      const nearFuel = (data.pois || []).some((p) => p.k === 'fuel' && Math.hypot(p.x - cx, p.z - cz) < 60)
+      if (!nearFuel) {
+        const uu = (frame.u0 + frame.u1) / 2
+        const vv = (frame.v0 + frame.v1) / 2
+        const rx = frame.ux * uu + frame.fx * vv
+        const rz = frame.uz * uu + frame.fz * vv
+        const uSpan = Math.max(2, frame.u1 - frame.u0)
+        const vSpan = Math.max(2, frame.v1 - frame.v0)
+        const yaw = Math.atan2(-frame.uz, frame.ux)
+        addDetailBox(chunk.detailBatch, rx, b.h, rz, uSpan, 0.24, vSpan, yaw, roofHex)
+        for (const [su, sv] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
+          const px = frame.ux * (uu + su * uSpan * 0.45) + frame.fx * (vv + sv * vSpan * 0.45)
+          const pz = frame.uz * (uu + su * uSpan * 0.45) + frame.fz * (vv + sv * vSpan * 0.45)
+          addDetailBox(chunk.detailBatch, px, b.h / 2, pz, 0.28, b.h, 0.28, yaw, '#8a877f')
+        }
+      }
+      return
+    }
+
     chunk.geos.push(geo)
 
     const houseLike = kind === 0
@@ -1505,6 +1678,368 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
       c.mesh.visible = visible
       if (c.detailMesh) c.detailMesh.visible = visible
     }
+  }
+
+  /* ---------------- landmarks / POIs ---------------- */
+  const landmarkBatch = makeDetailBatch()
+  const signGroup = new THREE.Group()
+  const structureGroup = new THREE.Group()
+  group.add(signGroup, structureGroup)
+  const signCache = new Map()
+
+  function signMaterial(text, sub, style) {
+    const key = `${text}|${sub}|${style.bg}|${style.fg}|${style.accent}`
+    if (signCache.has(key)) return signCache.get(key)
+    const tex = makeLabelTexture(text, sub, {
+      w: 640,
+      h: 128,
+      bg: style.bg,
+      fg: style.fg,
+      accent: style.accent,
+      border: true,
+    })
+    const mat = new THREE.MeshBasicMaterial({
+      map: tex,
+      transparent: true,
+      toneMapped: false,
+      side: THREE.DoubleSide,
+    })
+    signCache.set(key, mat)
+    return mat
+  }
+
+  function addSignBoard(text, sub, x, y, z, yaw, width, height, style, posts = false) {
+    const label = cleanLabel(text).slice(0, 30) || 'SUBANG JAYA'
+    const mat = signMaterial(label, sub, style)
+    const nx = Math.sin(yaw)
+    const nz = Math.cos(yaw)
+    addDetailBox(landmarkBatch, x, y, z, width + 0.18, height + 0.16, 0.13, yaw, style.dark || '#2b2c2a')
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), mat)
+    mesh.position.set(x + nx * 0.09, y, z + nz * 0.09)
+    mesh.rotation.y = yaw
+    signGroup.add(mesh)
+    if (posts) {
+      const tx = Math.cos(yaw)
+      const tz = -Math.sin(yaw)
+      for (const side of [-1, 1]) {
+        addDetailBox(
+          landmarkBatch,
+          x + tx * side * width * 0.36,
+          y * 0.5,
+          z + tz * side * width * 0.36,
+          0.12, y, 0.12, 0, '#4e4f4b',
+        )
+      }
+    }
+  }
+
+  function placeRoadSign(poi, kind, opts = {}) {
+    const name = cleanLabel(poi.n || poi.br || '')
+    if (!name) return
+    const near = frontRoadInfo(poi.x, poi.z)
+    if (!near || near.dist < 0.5) return
+    const dx = (poi.x - near.cx) / near.dist
+    const dz = (poi.z - near.cz) / near.dist
+    const edge = near.width / 2 + (opts.edge || 0.9)
+    const x = near.cx + dx * edge
+    const z = near.cz + dz * edge
+    const yaw = Math.atan2(-dx, -dz)
+    const style = signColorFor(kind)
+    addSignBoard(
+      name,
+      opts.sub || style.sub,
+      x,
+      opts.y || 3.1,
+      z,
+      yaw,
+      opts.w || 7.2,
+      opts.h || 1.35,
+      style,
+      opts.posts !== false,
+    )
+  }
+
+  function nearestBuildingNear(x, z, kinds, maxDist = 90) {
+    let best = null
+    for (const b of data.buildings) {
+      if (!kinds.has(b.k)) continue
+      let cx = 0
+      let cz = 0
+      for (const [px, pz] of b.p) { cx += px; cz += pz }
+      cx /= b.p.length
+      cz /= b.p.length
+      const d = Math.hypot(cx - x, cz - z)
+      if (d < maxDist && (!best || d < best.d)) best = { b, cx, cz, d }
+    }
+    return best
+  }
+
+  function placeFacadeSign(poi, kind, kinds, opts = {}) {
+    const target = nearestBuildingNear(poi.x, poi.z, kinds, opts.maxDist || 100)
+    if (!target) return false
+    const near = frontRoadInfo(target.cx, target.cz)
+    let fx = 0
+    let fz = 1
+    if (near && near.dist > 0.2) {
+      fx = (near.cx - target.cx) / near.dist
+      fz = (near.cz - target.cz) / near.dist
+    }
+    const frame = footprintFrame(target.b.p, { x: fx, z: fz })
+    const uc = (frame.u0 + frame.u1) / 2
+    const vc = frame.v1
+    const x = frame.ux * uc + frame.fx * vc + fx * 0.2
+    const z = frame.uz * uc + frame.fz * vc + fz * 0.2
+    const yaw = Math.atan2(fx, fz)
+    const name = cleanLabel(poi.n || target.b.n || '')
+    if (!name) return false
+    const style = signColorFor(kind)
+    addSignBoard(name, opts.sub || style.sub, x, opts.y || Math.min(target.b.h * 0.7, 6.2), z, yaw, opts.w || 10, opts.h || 1.5, style, false)
+    if (opts.dock) {
+      // large roller door / loading bay on the factory frontage
+      const dx = frame.ux * uc + frame.fx * (vc + 0.16)
+      const dz = frame.uz * uc + frame.fz * (vc + 0.16)
+      addDetailBox(landmarkBatch, dx, 2.05, dz, Math.min(8.5, (frame.u1 - frame.u0) * 0.32), 4.1, 0.22, Math.atan2(-frame.uz, frame.ux), '#273133')
+      addDetailBox(landmarkBatch, dx + fx * 1.1, 4.3, dz + fz * 1.1, Math.min(10, (frame.u1 - frame.u0) * 0.38), 0.25, 2.2, Math.atan2(-frame.uz, frame.ux), '#555b5b')
+    }
+    return true
+  }
+
+  function addFuelStation(poi) {
+    const name = cleanLabel(poi.n || poi.br || 'Petrol Station')
+    const style = fuelBrandStyle(poi.br || poi.n || '')
+    let cx = poi.x
+    let cz = poi.z
+    for (const area of data.areas) {
+      if (area.k !== 'fuel') continue
+      let ax = 0
+      let az = 0
+      for (const [x, z] of area.p) { ax += x; az += z }
+      ax /= area.p.length
+      az /= area.p.length
+      if (Math.hypot(ax - poi.x, az - poi.z) < 65) { cx = ax; cz = az; break }
+    }
+    const near = frontRoadInfo(cx, cz)
+    let fx = 0
+    let fz = 1
+    if (near && near.dist > 0.2) {
+      fx = (near.cx - cx) / near.dist
+      fz = (near.cz - cz) / near.dist
+    }
+    const ux = -fz
+    const uz = fx
+    const yaw = Math.atan2(-uz, ux)
+    const local = (l, w, y) => [cx + ux * l + fx * w, y, cz + uz * l + fz * w]
+    const box = (l, w, y, sl, sw, sh, col) => {
+      const [x, yy, z] = local(l, w, y)
+      addDetailBox(landmarkBatch, x, yy, z, sl, sh, sw, yaw, col)
+    }
+
+    // concrete forecourt
+    box(0, 0, 0.06, 19, 13, 0.05, '#b8b4aa')
+    // canopy
+    box(0, 0, 4.92, 14, 8, 0.34, '#efeee6')
+    for (const [l, w, col] of [
+      [0, 4.12, style.main], [0, -4.12, style.main],
+      [7.08, 0, style.main], [-7.08, 0, style.main],
+    ]) {
+      box(l, w, 4.62, l === 0 ? 14.1 : 0.25, l === 0 ? 0.25 : 8.1, 0.42, col)
+    }
+    for (const l of [-5.6, 5.6]) {
+      for (const w of [-2.8, 2.8]) box(l, w, 2.48, 0.36, 0.36, 4.9, '#d9d6cb')
+    }
+    // pump islands and pumps
+    for (const l of [-4.2, 0, 4.2]) {
+      box(l, 0.3, 0.11, 0.9, 2.9, 0.16, '#dad6cc')
+      box(l, 0.3, 0.86, 0.48, 0.42, 1.5, '#eeece4')
+      box(l, 0.54, 1.1, 0.35, 0.12, 0.55, '#1f2b31')
+      box(l, -0.02, 1.1, 0.35, 0.12, 0.55, '#1f2b31')
+    }
+    // small shop at the back
+    box(0, -5.35, 1.62, 5.2, 3.6, 3.16, '#e2ded2')
+    box(0, -3.53, 1.55, 4.3, 0.12, 2.2, '#1c2a31')
+    box(1.6, -3.5, 3.05, 1.8, 0.12, 0.7, style.main)
+    // price pylon near the road
+    const signStyle = {
+      bg: style.main,
+      fg: style.light || '#ffffff',
+      accent: style.accent,
+      dark: style.dark,
+      sub: 'FUEL',
+    }
+    const [px, , pz] = local(6.2, 5.4, 0)
+    addDetailBox(landmarkBatch, px, 3.3, pz, 0.72, 6.6, 0.72, yaw, style.dark)
+    const pylonYaw = Math.atan2(fx, fz)
+    for (const flip of [0, Math.PI]) {
+      const sy = pylonYaw + flip
+      addSignBoard(name, 'FUEL', px + Math.sin(sy) * 0.41, 5.25, pz + Math.cos(sy) * 0.41, sy, 3.2, 1.35, signStyle, false)
+    }
+    // small brand band on the canopy frontage
+    const [bx, , bz] = local(0, 4.24, 0)
+    addSignBoard(name, 'FUEL', bx, 4.06, bz, pylonYaw, 5.4, 0.62, signStyle, false)
+  }
+
+  function addChimney(x, z, height = 16, color = '#c9c6ba') {
+    const geo = new THREE.CylinderGeometry(0.55, 0.85, 1, 9)
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.85 })
+    const mesh = new THREE.Mesh(geo, mat)
+    mesh.scale.y = height
+    mesh.position.set(x, height / 2, z)
+    mesh.castShadow = true
+    mesh.receiveShadow = true
+    structureGroup.add(mesh)
+    const bandGeo = new THREE.CylinderGeometry(0.68, 0.7, 0.8, 9)
+    const band = new THREE.Mesh(bandGeo, new THREE.MeshStandardMaterial({ color: '#a84236', roughness: 0.8 }))
+    band.position.set(x, height * 0.72, z)
+    structureGroup.add(band)
+  }
+
+  function addSilo(x, z, radius = 2.2, height = 7) {
+    const geo = new THREE.CylinderGeometry(radius, radius, height, 12)
+    const mat = new THREE.MeshStandardMaterial({ color: '#b9bcb7', roughness: 0.6, metalness: 0.25 })
+    const mesh = new THREE.Mesh(geo, mat)
+    mesh.position.set(x, height / 2, z)
+    mesh.castShadow = true
+    mesh.receiveShadow = true
+    structureGroup.add(mesh)
+    const cone = new THREE.Mesh(
+      new THREE.ConeGeometry(radius * 1.03, radius * 0.65, 12),
+      new THREE.MeshStandardMaterial({ color: '#9fa39f', roughness: 0.65, metalness: 0.3 }),
+    )
+    cone.position.set(x, height + radius * 0.32, z)
+    structureGroup.add(cone)
+  }
+
+  // Fuel stations, pitches and POI signs are real OSM features.
+  const sortedPois = (data.pois || []).slice().sort((a, b) => Math.hypot(a.x - data.spawn.x, a.z - data.spawn.z) - Math.hypot(b.x - data.spawn.x, b.z - data.spawn.z))
+  for (const area of data.areas) {
+    if (area.k === 'pitch' || area.k === 'stadium' || area.k === 'sports') {
+      addFootballField(landmarkBatch, area)
+    }
+  }
+
+  let fuelDone = 0
+  const signLimits = { school: 0, factory: 0, mosque: 0, hospital: 0, supermarket: 0, restaurant: 0 }
+  for (const poi of sortedPois) {
+    const d = Math.hypot(poi.x - data.spawn.x, poi.z - data.spawn.z)
+    if (poi.k === 'fuel') {
+      addFuelStation(poi)
+      fuelDone++
+      continue
+    }
+    if (d > 2600) continue
+    if (poi.k === 'school' && signLimits.school < 28) {
+      placeRoadSign(poi, 'school', { w: 8.2, y: 3.3, posts: true, sub: 'SEKOLAH' })
+      placeFacadeSign(poi, 'school', new Set(['school', 'kindergarten', 'university', 'college']), {
+        w: 11.5, h: 1.7, y: 6.0, sub: 'SEKOLAH',
+      })
+      signLimits.school++
+    } else if (poi.k === 'factory' && signLimits.factory < 26) {
+      placeRoadSign(poi, 'factory', { w: 7.8, y: 3.45, posts: true, sub: 'FACTORY' })
+      placeFacadeSign(poi, 'factory', new Set(['industrial', 'warehouse', 'manufacture']), {
+        w: 11, h: 1.8, y: 5.4, sub: 'FACTORY', dock: true,
+      })
+      signLimits.factory++
+      if (d < 2000 && data.buildings) {
+        const near = frontRoadInfo(poi.x, poi.z)
+        const fx = near ? (near.cx - poi.x) / Math.max(near.dist, 0.1) : 0
+        const fz = near ? (near.cz - poi.z) / Math.max(near.dist, 0.1) : 1
+        const ux = -fz
+        const uz = fx
+        const side = hash2(poi.x, poi.z) > 0.5 ? 1 : -1
+        addChimney(poi.x + ux * side * 6.5 - fx * 2.0, poi.z + uz * side * 6.5 - fz * 2.0, 14 + hash2(poi.x, poi.z) * 8)
+        if (hash2(poi.z, poi.x) > 0.6) addSilo(poi.x - ux * side * 5.5 - fx * 3.0, poi.z - uz * side * 5.5 - fz * 3.0, 1.8, 6)
+      }
+    } else if ((poi.k === 'mosque' || poi.k === 'worship') && signLimits.mosque < 20) {
+      placeRoadSign(poi, poi.k, { w: 6.8, y: 3.0, posts: true, sub: poi.k === 'mosque' ? 'MASJID' : 'RUMAH IBADAT' })
+      signLimits.mosque++
+    } else if (poi.k === 'hospital' && signLimits.hospital < 14) {
+      placeRoadSign(poi, 'hospital', { w: 6.0, y: 3.0, posts: true, sub: 'KLINIK' })
+      signLimits.hospital++
+    } else if (poi.k === 'supermarket' && signLimits.supermarket < 12) {
+      placeRoadSign(poi, 'supermarket', { w: 5.6, y: 3.3, posts: false, sub: 'PASAR RAYA' })
+      signLimits.supermarket++
+    } else if ((poi.k === 'restaurant' || poi.k === 'cafe') && signLimits.restaurant < 20) {
+      placeRoadSign(poi, 'restaurant', { w: 5.0, y: 3.2, posts: false, sub: poi.k === 'cafe' ? 'KAFE' : 'RESTORAN' })
+      signLimits.restaurant++
+    }
+  }
+
+  const domeMat = new THREE.MeshStandardMaterial({ color: 0xc7a24a, roughness: 0.36, metalness: 0.45 })
+  const minaretMat = new THREE.MeshStandardMaterial({ color: 0xe8e1cf, roughness: 0.9 })
+
+  // If a mosque is mapped only as a node, still give it a recognisable
+  // prayer-house silhouette and sign.
+  const mosqueStructures = new THREE.Group()
+  group.add(mosqueStructures)
+  if (data.pois) {
+    for (const poi of data.pois) {
+      if (poi.k !== 'mosque') continue
+      const nearBuilding = nearestBuildingNear(poi.x, poi.z, new Set(['mosque', 'musalla']), 35)
+      if (nearBuilding) continue
+      const near = frontRoadInfo(poi.x, poi.z)
+      const fx = near && near.dist > 0.2 ? (near.cx - poi.x) / near.dist : 0
+      const fz = near && near.dist > 0.2 ? (near.cz - poi.z) / near.dist : 1
+      const yaw = Math.atan2(-fz, fx)
+      addDetailBox(landmarkBatch, poi.x, 2.4, poi.z, 10, 4.8, 7, yaw, '#ece5d5')
+      addDetailBox(landmarkBatch, poi.x + fx * 3.55, 1.3, poi.z + fz * 3.55, 0.15, 2.6, 1.2, yaw, '#263c3a')
+      const dome = new THREE.Mesh(new THREE.SphereGeometry(2.8, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), domeMat)
+      dome.scale.y = 0.85
+      dome.position.set(poi.x, 4.8 + 0.25, poi.z)
+      dome.castShadow = true
+      mosqueStructures.add(dome)
+      const minaret = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.45, 9, 8), minaretMat)
+      minaret.position.set(poi.x + 4.8, 4.5, poi.z - 2.0)
+      mosqueStructures.add(minaret)
+      const cap = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.2, 8), domeMat)
+      cap.position.set(poi.x + 4.8, 9.7, poi.z - 2.0)
+      mosqueStructures.add(cap)
+      if (poi.n) {
+        placeRoadSign(poi, 'mosque', { w: 6.4, y: 3.0, posts: true, sub: 'SURAU' })
+      }
+    }
+  }
+
+  // A few landmark mosques get a dome and minaret.
+  for (const b of data.buildings) {
+    if (b.k !== 'mosque' && b.k !== 'musalla') continue
+    let cx = 0
+    let cz = 0
+    for (const [x, z] of b.p) { cx += x; cz += z }
+    cx /= b.p.length
+    cz /= b.p.length
+    if (data.spawn && Math.hypot(cx - data.spawn.x, cz - data.spawn.z) > 3200) continue
+    const frame = footprintFrame(b.p, null)
+    const uw = frame.u1 - frame.u0
+    const vw = frame.v1 - frame.v0
+    const radius = Math.max(1.2, Math.min(uw, vw) * 0.30)
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(radius, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+      domeMat,
+    )
+    dome.scale.y = 0.9
+    dome.position.set(cx, b.h + radius * 0.12, cz)
+    dome.castShadow = true
+    structureGroup.add(dome)
+    const minaret = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.52, 10.5, 8), minaretMat)
+    minaret.position.set(cx + frame.ux * (uw * 0.42), 5.25, cz + frame.uz * (uw * 0.42))
+    minaret.castShadow = true
+    structureGroup.add(minaret)
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(0.62, 1.4, 8), domeMat)
+    cap.position.set(cx + frame.ux * (uw * 0.42), 11.2, cz + frame.uz * (uw * 0.42))
+    structureGroup.add(cap)
+  }
+
+  if (landmarkBatch.pos.length) {
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(landmarkBatch.pos, 3))
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(landmarkBatch.col, 3))
+    geo.computeVertexNormals()
+    const mesh = new THREE.Mesh(geo, detailMaterial)
+    mesh.castShadow = true
+    mesh.receiveShadow = true
+    group.add(mesh)
+    landmarkBatch.pos.length = 0
+    landmarkBatch.col.length = 0
   }
 
   /* ---------------- trees ---------------- */
