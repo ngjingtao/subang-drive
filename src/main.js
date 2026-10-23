@@ -628,7 +628,8 @@ function updateDestinationDistances() {
   for (const dest of DESTINATIONS) {
     const el = document.querySelector(`[data-dist="${dest.id}"]`)
     if (!el) continue
-    const route = router.route({ x: physics.x, z: physics.z }, dest, dest.name)
+    const heading = { x: -Math.sin(physics.yaw), z: -Math.cos(physics.yaw) }
+    const route = router.route({ x: physics.x, z: physics.z }, dest, dest.name, heading)
     el.textContent = route ? formatDistance(route.distance) : '—'
   }
 }
@@ -656,7 +657,8 @@ function arrivalClock(minutesAhead) {
 
 function selectDestination(dest, { reroute = false } = {}) {
   if (!router) return
-  const route = router.route({ x: physics.x, z: physics.z }, dest, dest.name)
+  const heading = { x: -Math.sin(physics.yaw), z: -Math.cos(physics.yaw) }
+  const route = router.route({ x: physics.x, z: physics.z }, dest, dest.name, heading)
   if (!route) {
     hud.toast(`No route found to ${dest.name}`, 2400)
     return
