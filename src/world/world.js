@@ -2656,6 +2656,129 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     return false
   }
 
+  /* ---------------- moving traffic ---------------- */
+  const trafficCars = []
+  const trafficRoot = new THREE.Group()
+  trafficRoot.name = 'moving-traffic'
+  group.add(trafficRoot)
+  {
+    const carBodyGeo = new THREE.BoxGeometry(1.68, 0.56, 4.0)
+    const carCabinGeo = new THREE.BoxGeometry(1.4, 0.48, 1.82)
+    const wheelGeo = new THREE.BoxGeometry(0.24, 0.5, 0.56)
+    const lightGeo = new THREE.BoxGeometry(0.38, 0.12, 0.06)
+    const wheelMat = new THREE.MeshStandardMaterial({ color: 0x15181a, roughness: 0.95 })
+    const glassMat = new THREE.MeshStandardMaterial({ color: 0x1d2a30, roughness: 0.35, metalness: 0.25 })
+    const redLightMat = new THREE.MeshBasicMaterial({ color: 0xff3a28, toneMapped: false })
+    const headLightMat = new THREE.MeshBasicMaterial({ color: 0xffe8b0, toneMapped: false })
+    const colors = ['#e8e7e2', '#c9ccd0', '#2e3235', '#8f3030', '#3b5d7b', '#6d7173', '#d6d1c5', '#a99d8c']
+    const trafficRoads = []
+    for (const road of data.roads) {
+      if (!['primary', 'secondary', 'tertiary', 'residential', 'unclassified'].includes(road.t)) continue
+      if (road.tn || road.p.length < 2) continue
+      let len = 0
+      const cumulative = [0]
+      for (let i = 0; i < road.p.length - 1; i++) {
+        len += Math.hypot(road.p[i + 1][0] - road.p[i][0], road.p[i + 1][1] - road.p[i][1])
+        cumulative.push(len)
+      }
+      if (len < 70) continue
+      let minSpawn = Infinity
+      let minHome = Infinity
+      for (const [x, z] of road.p) {
+        minSpawn = Math.min(minSpawn, Math.hypot(x - data.spawn.x, z - data.spawn.z))
+        minHome = Math.min(minHome, Math.hypot(x - 93.8, z + 714.2))
+      }
+      trafficRoads.push({ road, len, cumulative, near: minSpawn < 1200 || minHome < 1200 })
+    }
+    const picks = []
+    const nearRoads = trafficRoads.filter((r) => r.near)
+    const nearCount = mobile ? 4 : 10
+    const allCount = mobile ? 4 : 10
+    for (let i = 0; i < nearCount && nearRoads.length; i++) picks.push(nearRoads[Math.floor(rng() * nearRoads.length)])
+    for (let i = 0; i < allCount && trafficRoads.length; i++) picks.push(trafficRoads[Math.floor(rng() * trafficRoads.length)])
+    for (const info of picks) {
+      const road = info.road
+      let dir = 1
+      if (road.ow && !road.owb) dir = 1
+      else if (road.owb) dir = -1
+      else dir = rng() > 0.5 ? 1 : -1
+      const color = colors[Math.floor(rng() * colors.length)]
+      const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.12 })
+      const car = new THREE.Group()
+      const body = new THREE.Mesh(carBodyGeo, bodyMat)
+      body.position.y = 0.48
+      body.castShadow = true
+      body.receiveShadow = true
+      car.add(body)
+      const cabin = new THREE.Mesh(carCabinGeo, glassMat)
+      cabin.position.set(0, 0.9, 0.1)
+      car.add(cabin)
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(1.28, 0.06, 1.62), bodyMat)
+      roof.position.set(0, 1.16, 0.1)
+      car.add(roof)
+      for (const wx of [-0.77, 0.77]) {
+        for (const wz of [-1.25, 1.25]) {
+          const wheel = new THREE.Mesh(wheelGeo, wheelMat)
+          wheel.position.set(wx, 0.28, wz)
+          car.add(wheel)
+        }
+      }
+      for (const lx of [-0.6, 0.6]) {
+        const tail = new THREE.Mesh(lightGeo, redLightMat)
+        tail.position.set(lx, 0.48, 2.02)
+        car.add(tail)
+        const head = new THREE.Mesh(lightGeo, headLightMat)
+        head.position.set(lx, 0.48, -2.02)
+        car.add(head)
+      }
+      car.position.set(road.p[0][0], 0.055, road.p[0][1])
+      trafficRoot.add(car)
+      trafficCars.push({
+        car,
+        info,
+        dir,
+        travel: rng() * info.len,
+        speed: 6.5 + rng() * 7,
+      })
+    }
+  }
+
+  function sampleTraffic(info, travel, dir) {
+    const pts = info.road.p
+    const cumulative = info.cumulative
+    const target = dir > 0 ? travel % info.len : info.len - (travel % info.len)
+    let i = 0
+    while (i < cumulative.length - 2 && cumulative[i + 1] < target) i++
+    const segLen = cumulative[i + 1] - cumulative[i] || 1
+    const t = Math.max(0, Math.min(1, (target - cumulative[i]) / segLen))
+    const a = pts[i]
+    const b = pts[i + 1]
+    const dx = b[0] - a[0]
+    const dz = b[1] - a[1]
+    const len = Math.hypot(dx, dz) || 1
+    let fx = dx / len
+    let fz = dz / len
+    if (dir < 0) { fx = -fx; fz = -fz }
+    const x = a[0] + dx * t
+    const z = a[1] + dz * t
+    // Malaysia drives on the left; offset the sprite car into its lane.
+    const lane = 1.45
+    const px = x + fz * lane
+    const pz = z - fx * lane
+    const h = bridgeHeightAt(px, pz, fx, fz)
+    return { x: px, z: pz, y: h, fx, fz }
+  }
+
+  function updateTraffic(dt) {
+    for (const tc of trafficCars) {
+      tc.travel += tc.speed * dt
+      if (tc.travel > tc.info.len) tc.travel %= tc.info.len
+      const p = sampleTraffic(tc.info, tc.travel, tc.dir)
+      tc.car.position.set(p.x, 0.055 + p.y, p.z)
+      tc.car.rotation.y = Math.atan2(-p.fx, -p.fz)
+    }
+  }
+
   /* ---------------- expose ---------------- */
   // building=roof is an open canopy (LRT platforms, bus stations, petrol
   // station canopies). Its footprint must not act as a solid wall across the
@@ -2690,8 +2813,9 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     setNight,
     updateWater,
     waterAt,
+    updateTraffic,
     updateCulling,
-    stats: { buildings: data.buildings.length, trees: trees.length, lamps: lampPositions.length, chunks: buildingChunkList.length },
+    stats: { buildings: data.buildings.length, trees: trees.length, lamps: lampPositions.length, chunks: buildingChunkList.length, traffic: trafficCars.length },
     windowUniforms,
     dispose() {
       scene.remove(group)

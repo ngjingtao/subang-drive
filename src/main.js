@@ -926,6 +926,7 @@ function loop(now) {
   updateCamera(dt, firstFrame)
   if (world && world.updateCulling) world.updateCulling(camera.position)
   if (world && world.updateWater) world.updateWater(rawDt)
+  if (world && world.updateTraffic) world.updateTraffic(dt)
   updateSun()
   updateMirror(dt)
   sky.update(camera)

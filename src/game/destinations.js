@@ -1,25 +1,25 @@
 /**
  * Hand-picked destinations around USJ / Subang Jaya.
  * x/z are the same local metre coordinates used by the map data.
- * Home is the spot from the original Google Maps pin; change it if needed.
+ * Home is 27, Jalan Pinggiran USJ 1/18; Nido uses the Google Maps pin.
  */
 export const DESTINATIONS = [
   {
     id: 'home',
     name: 'Home',
-    sub: 'USJ 3 · Subang Jaya',
+    sub: '27, Jalan Pinggiran USJ 1/18',
     icon: '🏠',
-    x: 0,
-    z: 0,
+    x: 93.8,
+    z: -714.2,
     color: '#e8a23a',
   },
   {
     id: 'nido',
     name: 'Nido Child Care',
-    sub: 'Jalan USJ 13/4E',
+    sub: 'The Nido Early Learning & Childcare Centre',
     icon: '🧸',
-    x: 2990,
-    z: 636,
+    x: 3202,
+    z: 756.3,
     color: '#e2557f',
   },
   {
