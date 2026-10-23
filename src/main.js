@@ -397,7 +397,7 @@ function updateRoadGuide() {
     const m = guideMeshes[i]
     const s = samples[i]
     if (!s) { m.visible = false; continue }
-    const h = world.bridgeHeightAt(s.x, s.z)
+    const h = world.bridgeHeightAt(s.x, s.z, s.dx, s.dz)
     m.position.set(s.x, 0.05 + h + 0.035, s.z)
     m.rotation.y = Math.atan2(-s.dx, -s.dz)
     m.visible = true

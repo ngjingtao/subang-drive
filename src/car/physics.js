@@ -214,24 +214,25 @@ export class CarPhysics {
     this.roadRef = gridRef
 
     // Decide whether we are on top of a flyover or passing underneath it.
-    // The 2-D bridge query cannot tell the two apart, so keep the elevated
-    // height once we are up there (or when entering a low ramp); do not snap
-    // a car driving on the road below up onto the deck above its roof.
-    const bridgeInfo = world.bridgeInfoAt(this.x, this.z)
-    const alreadyUp = this.roadY > 0.3
-    const lowRamp = bridgeInfo.h > 0.05 && bridgeInfo.h < 2.0
-    const sameRoad =
-      (bridgeInfo.name && bridgeInfo.name === gridName) ||
-      (bridgeInfo.ref && bridgeInfo.ref === gridRef)
-    const onBridge = bridgeInfo.h > 0.05 && (alreadyUp || lowRamp || sameRoad)
+    // Direction matters: the 2-D bridge footprint also matches traffic on the
+    // road crossing below. Only follow a deck when the car is heading along
+    // that deck and is either still up there or already on the bridge road.
+    const bridgeInfo = world.bridgeInfoAt(this.x, this.z, fx, fz)
+    const nearRoad = world.nearestRoadInfo(this.x, this.z)
+    const bridgeRoad = nearRoad && bridgeInfo.roadIndex >= 0 && nearRoad.roadIndex === bridgeInfo.roadIndex
+    const wasUp = this.roadY > 0.3
+    // Enter a deck only at its ramp, then keep following it. This stops a car
+    // on the road underneath from being lifted onto the middle of a flyover.
+    const canEnter = bridgeInfo.h < 2.2
+    const onBridge = bridgeInfo.h > 0.05 && (wasUp || (bridgeRoad && canEnter))
     this.roadY = onBridge ? bridgeInfo.h : 0
     if (onBridge && bridgeInfo.name) {
       this.roadName = bridgeInfo.name
       this.roadRef = bridgeInfo.ref
     }
 
-    const hf = this.roadY > 0.12 ? world.bridgeHeightAt(this.x + fx * 1.25, this.z + fz * 1.25) : 0
-    const hr = this.roadY > 0.12 ? world.bridgeHeightAt(this.x - fx * 1.25, this.z - fz * 1.25) : 0
+    const hf = this.roadY > 0.12 ? world.bridgeHeightAt(this.x + fx * 1.25, this.z + fz * 1.25, fx, fz) : 0
+    const hr = this.roadY > 0.12 ? world.bridgeHeightAt(this.x - fx * 1.25, this.z - fz * 1.25, fx, fz) : 0
     const targetRoadPitch = Math.atan2(hf - hr, 2.5)
     this.roadPitch += (targetRoadPitch - this.roadPitch) * Math.min(1, 8 * dt)
 

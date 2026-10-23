@@ -1048,6 +1048,9 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
         w: road.w / 2 + (road.t === 'motorway' || road.t === 'trunk' ? 3.0 : 2.2),
         name: road.n || '',
         ref: road.ref || '',
+        roadIndex: index,
+        dirX: dx / len,
+        dirZ: dz / len,
       })
     }
 
@@ -1106,7 +1109,12 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     }
   })
 
-  function bridgeInfoAt(x, z) {
+  function bridgeInfoAt(x, z, headingX = 0, headingZ = 0) {
+    const headingLen = Math.hypot(headingX, headingZ)
+    if (headingLen > 0.0001) {
+      headingX /= headingLen
+      headingZ /= headingLen
+    }
     const gx = Math.floor(x / BRIDGE_CELL)
     const gz = Math.floor(z / BRIDGE_CELL)
     let bestD = Infinity
@@ -1121,6 +1129,13 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
           const dz = s.bz - s.az
           const l2 = dx * dx + dz * dz
           if (!l2) continue
+          if (headingX || headingZ) {
+            // A flyover only counts for a car travelling along its deck.
+            // A road crossing underneath (or another bridge passing over)
+            // must not lift the car onto this deck.
+            const dot = Math.abs((headingX * s.dirX + headingZ * s.dirZ))
+            if (dot < 0.55) continue
+          }
           let t = ((x - s.ax) * dx + (z - s.az) * dz) / l2
           t = Math.max(0, Math.min(1, t))
           const cx = s.ax + dx * t
@@ -1128,16 +1143,23 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
           const d = Math.hypot(x - cx, z - cz)
           if (d <= s.w && d < bestD) {
             bestD = d
-            best = { h: s.ha + (s.hb - s.ha) * t, name: s.name, ref: s.ref }
+            best = {
+              h: s.ha + (s.hb - s.ha) * t,
+              name: s.name,
+              ref: s.ref,
+              roadIndex: s.roadIndex,
+              dirX: s.dirX,
+              dirZ: s.dirZ,
+            }
           }
         }
       }
     }
-    return best || { h: 0, name: '', ref: '' }
+    return best || { h: 0, name: '', ref: '', roadIndex: -1, dirX: 0, dirZ: 0 }
   }
 
-  function bridgeHeightAt(x, z) {
-    return bridgeInfoAt(x, z).h
+  function bridgeHeightAt(x, z, headingX = 0, headingZ = 0) {
+    return bridgeInfoAt(x, z, headingX, headingZ).h
   }
 
   for (const path of data.paths) {
