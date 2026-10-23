@@ -128,7 +128,10 @@ export class CarPhysics {
         let refYaw = roadNear.angle + (this.roadSign < 0 ? Math.PI : 0)
         let diff = this.yaw - refYaw
         diff = Math.atan2(Math.sin(diff), Math.cos(diff))
-        let limit = 1.05 // ~60 degrees; enough for bends and lane changes
+        // Only a real U-turn should be blocked. A crossroad / bridge above
+        // can temporarily become the nearest road and a 60-degree limit
+        // used to yank the car sideways there.
+        let limit = 1.95 // ~112 degrees; allows right-angle crossings
         if (Math.abs(diff) > limit) {
           this.yaw = refYaw + Math.sign(diff) * limit
           this.yawRate *= 0.15
