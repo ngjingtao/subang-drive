@@ -135,3 +135,27 @@ The larger map has 48k buildings and loads in roughly 10 seconds on a modern mac
 - Built with [Three.js](https://threejs.org/) (MIT) and [Vite](https://vitejs.dev/) (MIT).
 - This is a **fan-made, non-commercial project**. It is not affiliated with, endorsed by, or licensed by Toyota. “Toyota” and “Vios” are trademarks of Toyota Motor Corporation; the cockpit is a stylised tribute, not a licensed 3D model.
 - The vehicle handling, traffic (there is none), and city details are simplified for playability. Roads and buildings are as mapped in OpenStreetMap at the time the snapshot was generated.
+
+---
+
+## Deploying
+
+The repo is ready for **Render Static Site** using the included `render.yaml`.
+
+1. Push the repo to GitHub (the intended remote is `git@github.com:ngjingtao/subang-drive.git`):
+   ```bash
+   git push -u origin main
+   ```
+2. In Render: **New → Blueprint**, connect the repository, then **Apply**. The blueprint uses:
+   - build: `npm ci && npm run build`
+   - publish: `dist`
+   - SPA rewrite to `index.html`
+   - no-cache for `sw.js`, immutable caching for hashed assets
+3. The service is defined as `subang-drive-usj3`, so the URL will be
+   `https://subang-drive-usj3.onrender.com` (Render may add a suffix if the name is taken).
+
+Alternatively, create a Render **Static Site** manually with the same build command and publish directory. The 9.8 MB map is committed in `public/data/`, so Render does not need to call OpenStreetMap during a deploy.
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/ngjingtao/subang-drive)
+
+The service worker is production-only (it is registered when `import.meta.env.PROD` is true), so the deployed site is installable as a PWA and works offline after the first visit.
