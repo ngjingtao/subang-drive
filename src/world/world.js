@@ -827,6 +827,68 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
   ground.receiveShadow = true
   group.add(ground)
 
+  /* ---------------- animated water ---------------- */
+  const waterUniforms = {
+    uTime: { value: 0 },
+    uNight: { value: 0 },
+    uSunDir: { value: new THREE.Vector3(0.36, 0.68, 0.28).normalize() },
+    uSunColor: { value: new THREE.Color(0xffce92) },
+    uSky: { value: new THREE.Color(0x315d66) },
+    uHorizon: { value: new THREE.Color(0x68837d) },
+    uDeep: { value: new THREE.Color(0x061f23) },
+    uShallow: { value: new THREE.Color(0x16443f) },
+  }
+  const waterMaterial = new THREE.ShaderMaterial({
+    uniforms: waterUniforms,
+    transparent: true,
+    depthWrite: true,
+    side: THREE.DoubleSide,
+    vertexShader: `
+      varying vec3 vWorld;
+      void main() {
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vWorld = wp.xyz;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform float uNight;
+      uniform vec3 uSunDir;
+      uniform vec3 uSunColor;
+      uniform vec3 uSky;
+      uniform vec3 uHorizon;
+      uniform vec3 uDeep;
+      uniform vec3 uShallow;
+      varying vec3 vWorld;
+
+      void main() {
+        vec2 p = vWorld.xz * 0.55;
+        float t = uTime;
+        vec2 g = vec2(0.0);
+        g.x += cos(p.x * 1.7 + p.y * 0.35 + t * 1.3) * 0.024;
+        g.x += cos(p.x * 3.1 - p.y * 0.90 - t * 1.8) * 0.009;
+        g.y += cos(p.y * 1.9 - p.x * 0.45 - t * 1.1) * 0.023;
+        g.y += sin(p.x * 1.1 + p.y * 2.70 + t * 1.5) * 0.008;
+        vec3 n = normalize(vec3(-g.x, 1.0, -g.y));
+        vec3 viewDir = normalize(cameraPosition - vWorld);
+        float fres = pow(1.0 - max(dot(viewDir, n), 0.0), 4.0);
+        vec3 refl = reflect(-viewDir, n);
+        vec3 sky = mix(uHorizon, uSky, clamp(refl.y * 0.9 + 0.18, 0.0, 1.0));
+        vec3 base = mix(uDeep, uShallow, 0.28 + 0.20 * sin(p.x * 0.6 + p.y * 0.4));
+        vec3 col = mix(base, sky, 0.06 + fres * 0.46);
+        float spec = pow(max(dot(refl, uSunDir), 0.0), 110.0);
+        col += uSunColor * spec * 0.95 * (1.0 - uNight * 0.65);
+        float sparkle = pow(max(dot(refl, normalize(uSunDir + vec3(0.13, 0.0, 0.07))), 0.0), 220.0);
+        col += uSunColor * sparkle * 0.45 * (1.0 - uNight * 0.5);
+        col = mix(col, col * 0.22 + vec3(0.015, 0.03, 0.045), uNight * 0.55);
+        gl_FragColor = vec4(col, 0.90);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
+    `,
+  })
+
   /* ---------------- land use areas ---------------- */
   const areaGeos = []
   const waterGeos = []
@@ -860,18 +922,40 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
   if (waterGeos.length) {
     const merged = mergeGeometries(waterGeos, false)
     if (merged) {
-      const water = new THREE.Mesh(
-        merged,
-        new THREE.MeshStandardMaterial({
-          vertexColors: true,
-          roughness: 0.12,
-          metalness: 0.15,
-          transparent: true,
-          opacity: 0.92,
-        }),
-      )
+      const water = new THREE.Mesh(merged, waterMaterial)
       water.receiveShadow = true
+      water.renderOrder = 2
       group.add(water)
+    }
+  }
+
+  // Rivers, streams, canals and drains are separate animated ribbons.
+  if (data.waterways && data.waterways.length) {
+    const bankGeos = []
+    const waterwayGeos = []
+    for (const way of data.waterways) {
+      if (way.p.length < 2) continue
+      const bank = ribbon(way.p, Math.max(2.6, way.w + 2.4), 0.021, 12, 1.0)
+      if (bank) bankGeos.push(bank)
+      const geo = ribbon(way.p, way.w, 0.034, 12, 1.0)
+      if (geo) waterwayGeos.push(geo)
+    }
+    if (bankGeos.length) {
+      const bankMesh = new THREE.Mesh(
+        mergeGeometries(bankGeos, false),
+        new THREE.MeshStandardMaterial({ color: '#3f5038', roughness: 1 }),
+      )
+      bankMesh.receiveShadow = true
+      group.add(bankMesh)
+      for (const g of bankGeos) g.dispose()
+    }
+    if (waterwayGeos.length) {
+      const merged = mergeGeometries(waterwayGeos, false)
+      const waterwayMesh = new THREE.Mesh(merged, waterMaterial)
+      waterwayMesh.receiveShadow = true
+      waterwayMesh.renderOrder = 2
+      group.add(waterwayMesh)
+      for (const g of waterwayGeos) g.dispose()
     }
   }
 
@@ -2419,13 +2503,79 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     group.add(posts, signs)
   }
 
+  /* ---------------- water query ---------------- */
+  const waterAreas = data.areas.filter((a) => a.k === 'water')
+  const waterWays = (data.waterways || []).filter((w) => w.w >= 3 && ['river', 'stream', 'canal'].includes(w.k))
+  const waterCells = new Map()
+  const WATER_CELL = 32
+  for (const area of waterAreas) {
+    let minX = Infinity
+    let maxX = -Infinity
+    let minZ = Infinity
+    let maxZ = -Infinity
+    for (const [x, z] of area.p) {
+      if (x < minX) minX = x
+      if (x > maxX) maxX = x
+      if (z < minZ) minZ = z
+      if (z > maxZ) maxZ = z
+    }
+    for (let gx = Math.floor(minX / WATER_CELL); gx <= Math.floor(maxX / WATER_CELL); gx++) {
+      for (let gz = Math.floor(minZ / WATER_CELL); gz <= Math.floor(maxZ / WATER_CELL); gz++) {
+        const k = `${gx},${gz}`
+        let list = waterCells.get(k)
+        if (!list) waterCells.set(k, (list = []))
+        list.push({ t: 'area', area })
+      }
+    }
+  }
+  for (const way of waterWays) {
+    for (let i = 0; i < way.p.length - 1; i++) {
+      const [ax, az] = way.p[i]
+      const [bx, bz] = way.p[i + 1]
+      const minX = Math.min(ax, bx) - way.w
+      const maxX = Math.max(ax, bx) + way.w
+      const minZ = Math.min(az, bz) - way.w
+      const maxZ = Math.max(az, bz) + way.w
+      for (let gx = Math.floor(minX / WATER_CELL); gx <= Math.floor(maxX / WATER_CELL); gx++) {
+        for (let gz = Math.floor(minZ / WATER_CELL); gz <= Math.floor(maxZ / WATER_CELL); gz++) {
+          const k = `${gx},${gz}`
+          let list = waterCells.get(k)
+          if (!list) waterCells.set(k, (list = []))
+          list.push({ t: 'way', way, ax, az, bx, bz })
+        }
+      }
+    }
+  }
+  function waterAt(x, z) {
+    const list = waterCells.get(`${Math.floor(x / WATER_CELL)},${Math.floor(z / WATER_CELL)}`)
+    if (!list) return false
+    for (const item of list) {
+      if (item.t === 'area') {
+        if (pointInPolygon(x, z, item.area.p)) return true
+      } else {
+        const dx = item.bx - item.ax
+        const dz = item.bz - item.az
+        const l2 = dx * dx + dz * dz
+        let t = l2 > 0 ? ((x - item.ax) * dx + (z - item.az) * dz) / l2 : 0
+        t = Math.max(0, Math.min(1, t))
+        if (Math.hypot(x - (item.ax + dx * t), z - (item.az + dz * t)) < item.way.w / 2) return true
+      }
+    }
+    return false
+  }
+
   /* ---------------- expose ---------------- */
   const collision = new BuildingCollision(data.buildings)
 
   function setNight(n) {
     windowUniforms.uNight.value = n
+    waterUniforms.uNight.value = n
     if (lampMat) lampMat.emissiveIntensity = n * 1.9
     if (lampGlow) lampGlow.material.opacity = n * 0.75
+  }
+
+  function updateWater(dt) {
+    waterUniforms.uTime.value += Math.min(dt, 0.1)
   }
 
   return {
@@ -2440,6 +2590,8 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     spawn: data.spawn,
     bounds,
     setNight,
+    updateWater,
+    waterAt,
     updateCulling,
     stats: { buildings: data.buildings.length, trees: trees.length, lamps: lampPositions.length, chunks: buildingChunkList.length },
     windowUniforms,

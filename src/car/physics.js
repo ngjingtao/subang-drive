@@ -36,6 +36,7 @@ export class CarPhysics {
     this.turnBlocked = false
     this.collideFlash = 0
     this.onRoad = true
+    this.inWater = false
     this.roadName = spawn.name || ''
     this.roadRef = spawn.ref || ''
     this.timeSinceStart = 0
@@ -229,6 +230,15 @@ export class CarPhysics {
     if (onBridge && bridgeInfo.name) {
       this.roadName = bridgeInfo.name
       this.roadRef = bridgeInfo.ref
+    }
+
+    const inWater = this.roadY < 0.35 && world.waterAt ? world.waterAt(this.x, this.z) : false
+    this.inWater = !!inWater
+    if (inWater) {
+      // Deep water is not a road: it kills most of the momentum and makes the
+      // car wallow instead of skating across the lake at full speed.
+      this.speed *= Math.max(0, 1 - 2.8 * dt)
+      this.bounce = Math.min(0.03, this.bounce + Math.abs(this.speed) * 0.0009)
     }
 
     const hf = this.roadY > 0.12 ? world.bridgeHeightAt(this.x + fx * 1.25, this.z + fz * 1.25, fx, fz) : 0

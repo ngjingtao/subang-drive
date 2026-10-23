@@ -315,9 +315,11 @@ const signals = []
 const busStops = []
 const pois = []
 const poiSeen = new Set()
+const waterways = []
 
 const ROAD_TYPES = new Set(Object.keys(ROAD_WIDTH))
 const PATH_TYPES = new Set(['footway', 'path', 'steps', 'pedestrian', 'cycleway', 'corridor'])
+const WATERWAY_TYPES = new Set(['river', 'stream', 'canal', 'drain', 'ditch', 'brook'])
 
 const roadNodeUse = new Map()
 for (const way of ways) {
@@ -389,6 +391,26 @@ for (const way of ways) {
     continue
   }
 
+  if (tags.waterway && WATERWAY_TYPES.has(tags.waterway)) {
+    if (tags.tunnel === 'yes' || tags.culvert === 'yes') continue
+    const pts = []
+    let last = null
+    for (const [lon, lat] of coords) {
+      const x = sx(lon)
+      const z = sz(lat)
+      if (last && Math.hypot(x - last[0], z - last[1]) < 1.0) continue
+      pts.push([round2(x), round2(z)])
+      last = [x, z]
+    }
+    if (pts.length < 2) continue
+    const fallback = { river: 18, stream: 4, canal: 8, drain: 2.2, ditch: 1.8, brook: 3.5 }[tags.waterway] || 3
+    let width = parseFloat(tags.width)
+    if (!Number.isFinite(width)) width = fallback
+    width = Math.max(1.2, Math.min(30, width))
+    waterways.push({ k: tags.waterway, w: round2(width), n: tags.name || '', p: pts })
+    continue
+  }
+
   if (tags.building && tags['building:part'] !== 'yes') {
     if (coords.length < 4) continue
     const first = coords[0]
@@ -440,6 +462,8 @@ for (const way of ways) {
       if (tags.surface) extra.sf = tags.surface
       if (tags.amenity) extra.a = tags.amenity
       if (tags.man_made) extra.a = tags.man_made
+      if (tags.water) extra.w = tags.water
+      else if (tags.leisure === 'swimming_pool') extra.w = 'pool'
       areas.push({ k: kind, p: pts, ...extra })
       let acx = 0, acz = 0
       for (const [x, z] of pts) { acx += x; acz += z }
@@ -595,6 +619,7 @@ const out = {
   signals,
   busStops: busStops.slice(0, 120),
   pois: pois.slice(0, 2000),
+  waterways,
 }
 
 fs.mkdirSync(path.dirname(OUT), { recursive: true })
@@ -602,5 +627,5 @@ const json = JSON.stringify(out)
 fs.writeFileSync(OUT, json)
 console.log('Wrote', path.relative(ROOT, OUT), (json.length / 1024 / 1024).toFixed(2), 'MB')
 console.log(`  roads: ${roads.length}, buildings: ${buildings.length}, areas: ${areas.length}, paths: ${paths.length}`)
-console.log(`  trees: ${trees.length}, junctions: ${junctions.length}, signals: ${signals.length}, bus stops: ${busStops.length}, POIs: ${pois.length}`)
+console.log(`  trees: ${trees.length}, junctions: ${junctions.length}, signals: ${signals.length}, bus stops: ${busStops.length}, POIs: ${pois.length}, waterways: ${waterways.length}`)
 console.log(`  spawn: "${spawn.name}" at ${spawn.x.toFixed(0)},${spawn.z.toFixed(0)} (${spawn.neighbours ?? '?'} neighbours)`)

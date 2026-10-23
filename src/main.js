@@ -137,6 +137,8 @@ let introUntil = 0
 let turnHintAt = 0
 let guideGroup = null
 let guideMeshes = []
+let wakeRings = []
+let wakeTimer = 0
 
 const lookTarget = { yaw: 0, pitch: 0 }
 const tmpV = new THREE.Vector3()
@@ -228,6 +230,25 @@ async function init() {
     guideMeshes.push(m)
   }
   scene.add(guideGroup)
+
+  // Small expanding rings where the car is moving through water.
+  const wakeGeo = new THREE.RingGeometry(0.62, 0.78, 22)
+  wakeGeo.rotateX(-Math.PI / 2)
+  for (let i = 0; i < 7; i++) {
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xd8eef0,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    })
+    const ring = new THREE.Mesh(wakeGeo, mat)
+    ring.renderOrder = 4
+    ring.visible = false
+    ring.userData.age = 9
+    scene.add(ring)
+    wakeRings.push(ring)
+  }
 
   physics = new CarPhysics(world.spawn)
   physics.reset(world.spawn)
@@ -816,6 +837,33 @@ function applyQuality() {
   renderer.shadowMap.needsUpdate = true
 }
 
+function updateWake(dt) {
+  const active = !!(physics && physics.inWater && Math.abs(physics.speed) > 1.2 && running && !paused && !orientationBlocked)
+  if (active) {
+    wakeTimer -= dt
+    if (wakeTimer <= 0) {
+      wakeTimer = 0.18
+      const free = wakeRings.find((r) => r.userData.age > 1.15)
+      if (free) {
+        free.userData.age = 0
+        free.position.set(physics.x, 0.075, physics.z)
+        free.visible = true
+      }
+    }
+  }
+  for (const ring of wakeRings) {
+    const age = ring.userData.age + dt
+    ring.userData.age = age
+    if (age > 1.15) {
+      ring.visible = false
+      continue
+    }
+    const t = age / 1.15
+    ring.scale.setScalar(1 + t * 5.0)
+    ring.material.opacity = 0.32 * (1 - t) * (active ? 1 : 0.4)
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* loop                                                                */
 /* ------------------------------------------------------------------ */
@@ -872,8 +920,10 @@ function loop(now) {
   }
 
   updateRoadGuide()
+  updateWake(dt)
   updateCamera(dt, firstFrame)
   if (world && world.updateCulling) world.updateCulling(camera.position)
+  if (world && world.updateWater) world.updateWater(rawDt)
   updateSun()
   updateMirror(dt)
   sky.update(camera)

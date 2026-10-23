@@ -16,6 +16,8 @@ Drive real OpenStreetMap roads, past actual building footprints, in a right-hand
 
 ![Landmarks](docs/landmarks.jpg)
 
+![Water](docs/water.jpg)
+
 ![Waze-style phone navigation](docs/phone.jpg)
 
 ![E5 flyover over E6](docs/flyover.jpg)
@@ -97,6 +99,7 @@ The cockpit free-look gently recenters when you let go. Night switches on the he
 - **A 5× larger neighbourhood** — about 99 km² of playable data (a 7.2 × 7.2 km target box; complete OSM ways extend the visible/playable bounds to roughly 10 × 10 km), with 9,300+ road segments, 48,000+ buildings, 1,200+ land-use areas, footpaths, 171 traffic lights, 188 bus stops and 11,800+ junctions, baked from OpenStreetMap.
 - **USJ 3 streetscape** — real OSM footprints now carry pitched tiled roofs, shophouse awnings and signboards, low front walls with metal gates, car-porch canopies, driveways, parked Malaysian compact cars and leafy front gardens. Facades use framed windows, front doors, floor bands and concrete plinths, so the two-storey terraces read like the actual neighbourhood instead of generic blocks. Details are concentrated around the start area and thin out with distance for performance.
 - **Real OSM landmarks** — petrol stations are modelled with branded canopies, pumps, a shop, forecourt and price pylon; schools get gate/facade name signs and sports courts; factories have chimneys, silos, loading doors and entrance signs; football/futsal fields get turf, markings, goals and fencing; mosques get domes and minarets; supermarkets and restaurants get shophouse signage. The nearest ones to the start are a Petronas station, a futsal field, a factory, a school and a mosque.
+- **Animated water** — lakes, ponds, basins, swimming pools, rivers, streams, canals and drains use a moving water shader with ripples, sky reflection, sun glints and night darkening. Deep water slows the car and leaves an expanding wake; bridge decks stay above the water.
 - **Real OSM bridge/layer data** — the E5 (KESAS) flyover now passes over the E6 (ELITE) carriageway on a raised deck with parapets and piers, while ordinary junctions and residential streets are flat. The minimap carries E5/E6 route badges. Bridge height only follows a deck when you are on that bridge road and heading along it, so traffic crossing underneath stays at ground level instead of being lifted onto the flyover and dropped again.
 - **Owner’s Vios-inspired RHD cockpit** — a 2014 Vios-style dash with an aftermarket Android head unit (live speed, gear, car graphic and app tiles), pink dash-mat piping, silver wheel V-trim, twin-dial Optitron-style cluster with working needles and gear display, automatic shifter, handbrake, seats with headrests, door cards, light headliner and a working rear-view mirror (a live render of the road behind).
 - **Real driving feel** — arcade handling with speed-sensitive steering, automatic gears, engine/tyre audio synthesised with Web Audio, body roll, off-road drag, building collisions, handbrake slides and impact shake.
