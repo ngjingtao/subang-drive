@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0d10" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Subang Drive" />
+    <meta name="description" content="Free-roam 3D driving around USJ 3, Subang Jaya. Vios-inspired cockpit, real roads from OpenStreetMap." />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="./icons/icon.svg" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <title>Subang Drive — USJ 3</title>
+  </head>
+  <body>
+    <noscript><div style="position:fixed;inset:0;z-index:999;display:grid;place-items:center;background:#07090c;color:#f3f1ea;font:14px system-ui;text-align:center;padding:24px">Subang Drive needs JavaScript and WebGL.<br /><small style="opacity:.6">Please enable JavaScript and use a modern browser.</small></div></noscript>
+    <div id="app">
+      <canvas id="game" aria-label="3D driving game"></canvas>
+      <div id="vignette"></div>
+      <div id="dawn"></div>
+
+      <!-- Loading -->
+      <section id="loading" class="screen">
+        <div class="brand small">
+          <div class="brand-kicker">Selamat datang ke</div>
+          <h1>SUBANG<span>DRIVE</span></h1>
+        </div>
+        <div class="loadbar"><i id="loadfill"></i></div>
+        <div id="loadmsg">Memuatkan peta…</div>
+        <div class="credit">Map data © OpenStreetMap contributors</div>
+      </section>
+
+      <!-- Start -->
+      <section id="start" class="screen hidden">
+        <div class="start-inner">
+          <div class="brand">
+            <div class="brand-kicker">USJ 3 · SUBANG JAYA · SELANGOR</div>
+            <h1>SUBANG<span>DRIVE</span></h1>
+            <p class="tagline">A free-roam drive through the neighbourhood.<br />Real roads. Golden hour. One Toyota-shaped memory.</p>
+          </div>
+
+          <button id="playbtn" class="play">
+            <span class="play-dot"></span>
+            <span>MULA MEMANDU</span>
+            <small>start driving</small>
+          </button>
+
+          <div class="start-meta">
+            <div class="ctrl-grid">
+              <div><kbd>W</kbd><kbd>↑</kbd><span>Throttle</span></div>
+              <div><kbd>S</kbd><kbd>↓</kbd><span>Brake / reverse</span></div>
+              <div><kbd>A</kbd><kbd>D</kbd><span>Steer</span></div>
+              <div><kbd>Space</kbd><span>Handbrake</span></div>
+              <div><kbd>C</kbd><span>Camera</span></div>
+              <div><kbd>T</kbd><span>Time of day</span></div>
+              <div><kbd>R</kbd><span>Respawn</span></div>
+              <div><kbd>H</kbd><span>Horn</span></div>
+            </div>
+            <p class="touch-note">On iPad / Android: use the on-screen pedals and steering pads. Drag the view to look around.</p>
+          </div>
+
+          <div class="start-foot">
+            <span>Fan-made. Not affiliated with Toyota.</span>
+            <span>Map data © OpenStreetMap contributors (ODbL)</span>
+          </div>
+        </div>
+        <div class="start-side">
+          <div class="weathercard">
+            <div class="wc-time" id="wc-time">4:42 PM</div>
+            <div class="wc-label">Petang yang tenang</div>
+            <div class="wc-loc">Jalan TP7 · USJ 3</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- HUD -->
+      <div id="hud" class="hidden">
+        <div id="topbar">
+          <div class="locchip">
+            <span class="loc-dot"></span>
+            <div>
+              <b id="loc-road">Jalan TP7</b>
+              <small id="loc-area">USJ 3 · Subang Jaya</small>
+            </div>
+          </div>
+          <div class="top-actions">
+            <button id="btn-time" class="chipbtn" title="Time of day (T)">
+              <span id="time-label">4:42 PM</span>
+            </button>
+            <button id="btn-cam" class="chipbtn" title="Camera (C)">COCKPIT</button>
+            <button id="btn-sound" class="iconbtn" title="Sound (M)" aria-label="Sound">
+              <svg viewBox="0 0 24 24" width="18" height="18"><path d="M4 9v6h4l5 4V5L8 9H4zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z" fill="currentColor"/></svg>
+            </button>
+            <button id="btn-help" class="iconbtn" title="Help (Esc)" aria-label="Help">
+              <svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 17h-2v-2h2v2zm2.1-7.8-.9.9c-.7.7-1.2 1.2-1.2 2.9h-2c0-2 .6-2.8 1.6-3.8l1.2-1.2a2.5 2.5 0 1 0-4.2-1.8H7a4.5 4.5 0 1 1 8.1 3z" fill="currentColor"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div id="roadguide"><span class="gchev">»</span><span id="guide-text">FOLLOW ROAD</span></div>
+
+        <div id="minimap-wrap">
+          <canvas id="minimap" width="240" height="240"></canvas>
+          <span class="north">N</span>
+          <div class="minimap-ring"></div>
+          <span class="osm">© OSM</span>
+        </div>
+
+        <div id="speedo">
+          <div class="speed-arc">
+            <svg viewBox="0 0 200 200" width="200" height="200">
+              <circle class="arc-bg" cx="100" cy="100" r="86"></circle>
+              <circle id="rpm-arc" class="arc-fg" cx="100" cy="100" r="86"></circle>
+            </svg>
+          </div>
+          <div class="speed-num"><span id="speed">0</span><small>km/h</small></div>
+          <div class="speed-meta">
+            <span id="gear">P</span><i></i>
+            <span id="road-ref" class="refbadge"></span>
+            <span id="road-bot-name">Jalan Pinggiran USJ 3/6</span>
+          </div>
+        </div>
+
+        <div id="bottomleft">
+          <div class="hint" id="kbhint">
+            <span><kbd>W</kbd> gas</span><span><kbd>S</kbd> brake</span><span><kbd>C</kbd> camera</span><span><kbd>H</kbd> horn</span>
+          </div>
+          
+        </div>
+
+        <div id="toast"></div>
+
+        <div id="controls-right" class="touch-only">
+          <button id="t-case" class="tbtn small" aria-label="Handbrake">HB</button>
+          <button id="t-cam" class="tbtn small" aria-label="Camera">CAM</button>
+        </div>
+
+        <div id="pedals" class="touch-only">
+          <button id="t-brake" class="pedal brake" aria-label="Brake"><svg viewBox="0 0 24 24"><path d="M6 5h12v3H6zM6 10h12v3H6zM6 15h12v4H6z" fill="currentColor"/></svg><small>BRAKE</small></button>
+          <button id="t-gas" class="pedal gas" aria-label="Accelerate"><svg viewBox="0 0 24 24"><path d="M12 4 4 16h16L12 4z" fill="currentColor"/></svg><small>GAS</small></button>
+        </div>
+
+        <div id="steering" class="touch-only">
+          <button id="t-left" class="steer" aria-label="Steer left"><svg viewBox="0 0 24 24"><path d="M15 5 8 12l7 7z" fill="currentColor"/></svg></button>
+          <button id="t-right" class="steer" aria-label="Steer right"><svg viewBox="0 0 24 24"><path d="m9 5 7 7-7 7z" fill="currentColor"/></svg></button>
+        </div>
+      </div>
+
+      <!-- Pause / help -->
+      <section id="pause" class="screen hidden">
+        <div class="pause-card">
+          <div class="brand small"><h1>SUBANG<span>DRIVE</span></h1></div>
+          <h2>Berhenti sekejap.</h2>
+          <p class="muted">Paused · <span id="pause-loc">USJ 3</span></p>
+          <div class="pause-grid">
+            <div><kbd>W</kbd><kbd>S</kbd> Throttle / brake</div>
+            <div><kbd>A</kbd><kbd>D</kbd> Steer</div>
+            <div><kbd>Space</kbd> Handbrake</div>
+            <div><kbd>C</kbd> Cockpit / chase / hood</div>
+            <div><kbd>T</kbd> Golden hour / sunset / night</div>
+            <div><kbd>R</kbd> Respawn</div>
+            <div><kbd>M</kbd> Mute engine</div>
+            <div><kbd>H</kbd> Horn</div>
+          </div>
+          <div class="pause-buttons">
+            <button id="resume" class="play compact"><span class="play-dot"></span><span>SAMBUNG</span><small>resume</small></button>
+            <button id="respawn" class="ghostbtn">Respawn</button>
+          </div>
+          <p class="fineprint">Toyota Vios 2014 inspired interior — fan-made, not affiliated with Toyota. Map data © OpenStreetMap contributors (ODbL 1.0).</p>
+        </div>
+      </section>
+
+      <div id="rotate" class="hidden">
+        <div><span>↻</span><p>Rotate your device<br /><small>Landscape is better for driving</small></p></div>
+      </div>
+
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

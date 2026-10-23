@@ -1,0 +1,23 @@
+{
+  "name": "subang-drive",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A 3D free-roam drive around USJ 3, Subang Jaya, with a Toyota Vios 2014 inspired cockpit. Built with Three.js.",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview --host",
+    "map": "node scripts/build-map.mjs",
+    "map:refresh": "node scripts/build-map.mjs --refresh"
+  },
+  "dependencies": {
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.8"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
