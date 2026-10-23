@@ -71,7 +71,7 @@ The cockpit free-look gently recenters when you let go. Night switches on the he
 
 ### Phone navigation
 
-- Tap the **phone map** destinations: Home (the original Google Maps pin), **Nido Child Care** (Jalan USJ 9/3E), USJ 3 Playground and USJ 9 Park.
+- Tap the **phone map** destinations: Home (the original Google Maps pin), **Nido Child Care** (Jalan USJ 13/4E), USJ 3 Playground and USJ 9 Park.
 - The map is heading-up; the blue line is a real road-network route, not a straight line. It shows distance, ETA and the next turn, and reroutes if you leave the route.
 - **STOP** ends guidance; **CHANGE** goes back to the destination picker.
 - The destinations live in `src/game/destinations.js` — edit `home` if your actual home is a different point.

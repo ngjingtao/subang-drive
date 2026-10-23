@@ -16,10 +16,10 @@ export const DESTINATIONS = [
   {
     id: 'nido',
     name: 'Nido Child Care',
-    sub: 'Jalan USJ 9/3E',
+    sub: 'Jalan USJ 13/4E',
     icon: '🧸',
-    x: 2680,
-    z: 93,
+    x: 2990,
+    z: 636,
     color: '#e2557f',
   },
   {
