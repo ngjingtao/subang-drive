@@ -12,6 +12,8 @@ Drive real OpenStreetMap roads, past actual building footprints, in a right-hand
 
 ![Chase camera](docs/chase.jpg)
 
+![USJ 3 terraces](docs/estate.jpg)
+
 ![Waze-style phone navigation](docs/phone.jpg)
 
 ![E5 flyover over E6](docs/flyover.jpg)
@@ -91,6 +93,7 @@ The cockpit free-look gently recenters when you let go. Night switches on the he
 ## What's in the game
 
 - **A 5× larger neighbourhood** — about 99 km² of playable data (a 7.2 × 7.2 km target box; complete OSM ways extend the visible/playable bounds to roughly 10 × 10 km), with 9,300+ road segments, 48,000+ buildings, 1,200+ land-use areas, footpaths, 171 traffic lights, 188 bus stops and 11,800+ junctions, baked from OpenStreetMap.
+- **USJ 3 streetscape** — real OSM footprints now carry pitched tiled roofs, shophouse awnings and signboards, low front walls with metal gates, car-porch canopies, driveways, parked Malaysian compact cars and leafy front gardens. Facades use framed windows, front doors, floor bands and concrete plinths, so the two-storey terraces read like the actual neighbourhood instead of generic blocks. Details are concentrated around the start area and thin out with distance for performance.
 - **Real OSM bridge/layer data** — the E5 (KESAS) flyover now passes over the E6 (ELITE) carriageway on a raised deck with parapets and piers, while ordinary junctions and residential streets are flat. The minimap carries E5/E6 route badges.
 - **Owner’s Vios-inspired RHD cockpit** — a 2014 Vios-style dash with an aftermarket Android head unit (live speed, gear, car graphic and app tiles), pink dash-mat piping, silver wheel V-trim, twin-dial Optitron-style cluster with working needles and gear display, automatic shifter, handbrake, seats with headrests, door cards, light headliner and a working rear-view mirror (a live render of the road behind).
 - **Real driving feel** — arcade handling with speed-sensitive steering, automatic gears, engine/tyre audio synthesised with Web Audio, body roll, off-road drag, building collisions, handbrake slides and impact shake.
