@@ -431,6 +431,10 @@ for (const way of ways) {
     else if (tags.shop) extra.a = tags.shop
     else if (tags.man_made) extra.a = tags.man_made
     if (tags.brand) extra.br = tags.brand
+    if (tags.layer) {
+      const layer = parseFloat(tags.layer)
+      if (Number.isFinite(layer)) extra.l = layer
+    }
     buildings.push({ h: round2(h), b: round2(base), k: tags.building, p: pts, ...extra })
     // A named building also carries a POI so schools, workshops and shops
     // can get an entrance sign even when their area polygon is missing.

@@ -271,12 +271,14 @@ class BuildingCollision {
     }
   }
 
-  resolve(pos, radius) {
+  resolve(pos, radius, carBase = 0) {
     const gx = Math.floor(pos.x / this.cell)
     const gz = Math.floor(pos.z / this.cell)
     const boxes = this.map.get(`${gx},${gz}`)
     if (!boxes) return null
     for (const b of boxes) {
+      // A car on a flyover is above the roofs of the buildings underneath.
+      if (carBase > b.h + 0.2) continue
       // cheap reject first
       if (
         pos.x < b.minX - radius || pos.x > b.maxX + radius ||
@@ -806,6 +808,57 @@ function addParapet(batch, b, frame, wallHex) {
   addDetailBox(batch, bx, by, bz, u1 - u0, 0.6, 0.18, yaw, wallHex)
   addDetailBox(batch, cx, cy, cz, 0.18, 0.6, v1 - v0, yaw, wallHex)
   addDetailBox(batch, dx, dy, dz, 0.18, 0.6, v1 - v0, yaw, wallHex)
+}
+
+function findRoadOverlaps(buildings, roads, cell = 32) {
+  // Some OSM structures (LRT stations, overhead bridges, toll canopies and a
+  // few data errors) have footprints that cover a road. They must not be
+  // treated as ground-level walls. Find them once at build time.
+  const points = new Map()
+  for (const road of roads) {
+    if (road.b || road.tn || road.p.length < 2) continue
+    for (let i = 0; i < road.p.length - 1; i++) {
+      const [ax, az] = road.p[i]
+      const [bx, bz] = road.p[i + 1]
+      const len = Math.hypot(bx - ax, bz - az)
+      const steps = Math.max(1, Math.ceil(len / 5))
+      for (let s = 0; s <= steps; s++) {
+        const t = s / steps
+        const x = ax + (bx - ax) * t
+        const z = az + (bz - az) * t
+        const key = `${Math.floor(x / cell)},${Math.floor(z / cell)}`
+        let list = points.get(key)
+        if (!list) points.set(key, (list = []))
+        list.push([x, z])
+      }
+    }
+  }
+  const over = new Set()
+  buildings.forEach((b, index) => {
+    let minX = Infinity
+    let maxX = -Infinity
+    let minZ = Infinity
+    let maxZ = -Infinity
+    for (const [x, z] of b.p) {
+      if (x < minX) minX = x
+      if (x > maxX) maxX = x
+      if (z < minZ) minZ = z
+      if (z > maxZ) maxZ = z
+    }
+    outer: for (let gx = Math.floor(minX / cell); gx <= Math.floor(maxX / cell); gx++) {
+      for (let gz = Math.floor(minZ / cell); gz <= Math.floor(maxZ / cell); gz++) {
+        const list = points.get(`${gx},${gz}`)
+        if (!list) continue
+        for (const [x, z] of list) {
+          if (pointInPolygon(x, z, b.p)) {
+            over.add(index)
+            break outer
+          }
+        }
+      }
+    }
+  })
+  return over
 }
 
 /* ------------------------------------------------------------------ */
@@ -1592,9 +1645,11 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
 
   const buildingChunks = new Map()
   const chunkSize = 1200
+  const roadOverlaps = findRoadOverlaps(data.buildings, data.roads)
   const yardTrees = []
   data.buildings.forEach((b, index) => {
     if (b.p.length < 3) return
+    if (roadOverlaps.has(index) && b.k !== 'roof') return
     let cx = 0
     let cz = 0
     for (const [x, z] of b.p) { cx += x; cz += z }
@@ -1690,11 +1745,14 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
         const uSpan = Math.max(2, frame.u1 - frame.u0)
         const vSpan = Math.max(2, frame.v1 - frame.v0)
         const yaw = Math.atan2(-frame.uz, frame.ux)
-        addDetailBox(chunk.detailBatch, rx, b.h, rz, uSpan, 0.24, vSpan, yaw, roofHex)
+        const layerBase = Math.max(0, Number(b.l) || 0) * 3.0
+        const roofBase = Math.max(b.b || 0, layerBase)
+        const roofY = roofBase + b.h
+        addDetailBox(chunk.detailBatch, rx, roofY, rz, uSpan, 0.24, vSpan, yaw, roofHex)
         for (const [su, sv] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
           const px = frame.ux * (uu + su * uSpan * 0.45) + frame.fx * (vv + sv * vSpan * 0.45)
           const pz = frame.uz * (uu + su * uSpan * 0.45) + frame.fz * (vv + sv * vSpan * 0.45)
-          addDetailBox(chunk.detailBatch, px, b.h / 2, pz, 0.28, b.h, 0.28, yaw, '#8a877f')
+          addDetailBox(chunk.detailBatch, px, roofY / 2, pz, 0.28, roofY, 0.28, yaw, '#8a877f')
         }
       }
       return
@@ -2601,8 +2659,11 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
   /* ---------------- expose ---------------- */
   // building=roof is an open canopy (LRT platforms, bus stations, petrol
   // station canopies). Its footprint must not act as a solid wall across the
-  // road underneath.
-  const collision = new BuildingCollision(data.buildings.filter((b) => b.k !== 'roof'))
+  // road underneath. Buildings whose footprint covers a road are overhead
+  // structures or bad footprints, so they must not block ground traffic.
+  const collision = new BuildingCollision(
+    data.buildings.filter((b, index) => b.k !== 'roof' && !roadOverlaps.has(index)),
+  )
 
   function setNight(n) {
     windowUniforms.uNight.value = n

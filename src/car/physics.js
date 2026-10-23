@@ -153,7 +153,7 @@ export class CarPhysics {
     for (const offset of [0.95, 0, -0.95]) {
       const px = this.x + fx * offset
       const pz = this.z + fz * offset
-      const push = world.collision.resolve({ x: px, z: pz }, radius)
+      const push = world.collision.resolve({ x: px, z: pz }, radius, this.roadY)
       if (push) {
         this.x += push.x
         this.z += push.z
