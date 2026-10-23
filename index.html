@@ -114,6 +114,14 @@
                 <svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true"><path d="M10 2a8 8 0 1 0 4.9 14.3l5.4 5.4 1.4-1.4-5.4-5.4A8 8 0 0 0 10 2zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12z" fill="currentColor"/></svg>
                 <span id="phone-search-text">Where to?</span>
               </button>
+              <div id="nav-banner" class="nav-banner hidden">
+                <span id="banner-icon" class="banner-arrow">↰</span>
+                <div class="banner-copy">
+                  <b id="banner-dist">80 m</b>
+                  <span id="banner-road">Jalan</span>
+                </div>
+              </div>
+              <div class="phone-speed"><b id="phone-speed-value">0</b><small>km/h</small></div>
               <div id="phone-sheet" class="phone-sheet">
                 <div class="sheet-handle"></div>
                 <div id="dest-panel">
@@ -126,8 +134,8 @@
                     <span id="nav-dest-name">—</span>
                     <small id="nav-dest-sub"></small>
                   </div>
-                  <div class="nav-stats"><span id="nav-dist">—</span><i></i><span id="nav-eta">—</span></div>
-                  <div class="nav-next"><span id="nav-turn-icon">↑</span><span id="nav-next-text">—</span></div>
+                  <div id="nav-arrival" class="waze-arrival">—</div>
+                  <div id="nav-summary" class="waze-summary">—</div>
                   <div class="nav-buttons">
                     <button id="nav-stop">STOP</button>
                     <button id="nav-change">CHANGE</button>

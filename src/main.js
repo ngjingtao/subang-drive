@@ -612,6 +612,27 @@ function updateDestinationDistances() {
   }
 }
 
+function clockToMinutes(text) {
+  const m = String(text || '').match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i)
+  if (!m) return 16 * 60 + 42
+  let h = parseInt(m[1], 10) % 12
+  if (m[3].toUpperCase() === 'PM') h += 12
+  return h * 60 + parseInt(m[2], 10)
+}
+
+function minutesToClock(total) {
+  const mins = ((total % 1440) + 1440) % 1440
+  const h24 = Math.floor(mins / 60)
+  const mm = mins % 60
+  const ampm = h24 >= 12 ? 'PM' : 'AM'
+  const h = h24 % 12 || 12
+  return `${h}:${String(mm).padStart(2, '0')} ${ampm}`
+}
+
+function arrivalClock(minutesAhead) {
+  return minutesToClock(clockToMinutes(preset?.clock || '4:42 PM') + minutesAhead)
+}
+
 function selectDestination(dest, { reroute = false } = {}) {
   if (!router) return
   const route = router.route({ x: physics.x, z: physics.z }, dest, dest.name)
@@ -632,6 +653,7 @@ function selectDestination(dest, { reroute = false } = {}) {
   document.getElementById('nav-dest-sub').textContent = dest.sub
   document.getElementById('dest-panel').classList.add('hidden')
   document.getElementById('nav-panel').classList.remove('hidden')
+  document.getElementById('nav-banner').classList.remove('hidden')
   document.getElementById('phone').classList.add('navigating')
   navUiLast = 0
   updateNavUi({ along: 0, off: 0 })
@@ -644,6 +666,7 @@ function stopNavigation() {
   document.getElementById('phone-search-text').textContent = 'Where to?'
   document.getElementById('dest-panel').classList.remove('hidden')
   document.getElementById('nav-panel').classList.add('hidden')
+  document.getElementById('nav-banner').classList.add('hidden')
   document.getElementById('phone').classList.remove('navigating')
   updateDestinationDistances()
 }
@@ -680,28 +703,40 @@ function updateNavigation(now) {
 
 function updateNavUi(progress) {
   if (!nav) return
-  const remaining = Math.max(0, nav.route.distance - (progress?.along || 0))
-  const next = router.nextInstruction(nav.route, progress?.along || 0)
+  const along = progress?.along || 0
+  const remaining = Math.max(0, nav.route.distance - along)
+  const next = router.nextInstruction(nav.route, along)
   const icons = { start: '↑', continue: '↑', left: '↰', right: '↱', uturn: '↺', arrive: '⚑' }
+  const etaMin = Math.max(1, Math.round(remaining / 520))
 
-  document.getElementById('nav-dist').textContent = nav.arrived ? 'Arrived' : formatDistance(remaining)
-  document.getElementById('nav-eta').textContent = nav.arrived ? '' : formatEta(remaining)
+  document.getElementById('nav-arrival').textContent = nav.arrived ? 'Arrived' : arrivalClock(etaMin)
+  document.getElementById('nav-summary').textContent = nav.arrived
+    ? nav.dest.name
+    : `${etaMin} min  ·  ${formatDistance(remaining)}`
 
-  let text = 'You have arrived'
+  let bannerDist = 'Arrived'
+  let bannerRoad = nav.dest.name
   let icon = '⚑'
+  let guideText = `ARRIVED · ${nav.dest.name}`
+
   if (!nav.arrived) {
     if (!next || next.type === 'arrive') {
-      text = `Arrive at ${nav.dest.name}`
+      bannerDist = formatDistance(remaining)
+      bannerRoad = nav.dest.name
       icon = '⚑'
+      guideText = `ARRIVE · ${nav.dest.name}`
     } else {
-      const d = Math.max(0, next.at - (progress?.along || 0))
-      text = `${formatDistance(d)} · ${next.text}`
+      const d = Math.max(0, next.at - along)
+      bannerDist = formatDistance(d)
+      bannerRoad = next.road || 'the road'
       icon = icons[next.type] || '↑'
+      guideText = `${icon} ${formatDistance(d)} · ${next.text}`
     }
   }
-  document.getElementById('nav-turn-icon').textContent = icon
-  document.getElementById('nav-next-text').textContent = text
-  hud.setGuide(`${icon} ${text}`, true)
+  document.getElementById('banner-icon').textContent = icon
+  document.getElementById('banner-dist').textContent = bannerDist
+  document.getElementById('banner-road').textContent = bannerRoad
+  hud.setGuide(guideText, true)
 }
 
 /* ------------------------------------------------------------------ */
@@ -805,6 +840,8 @@ function loop(now) {
   if (active && input) {
     physics.update(dt, input.state(), world)
     updateCarVisual()
+    const phoneSpeed = document.getElementById('phone-speed-value')
+    if (phoneSpeed) phoneSpeed.textContent = String(Math.round(physics.speedKmh))
     audio.update({
       rpm: physics.rpm,
       speed: physics.speedKmh / 3.6,

@@ -220,7 +220,7 @@ export class Minimap {
       ctx.strokeStyle = 'rgba(255,255,255,0.96)'
       ctx.lineWidth = 12
       ctx.stroke()
-      ctx.strokeStyle = '#2f7cf6'
+      ctx.strokeStyle = '#6b4fd8'
       ctx.lineWidth = 7.2
       ctx.stroke()
     }
@@ -252,7 +252,7 @@ export class Minimap {
     ctx.arc(0, 0, 16, 0, Math.PI * 2)
     ctx.fill()
     ctx.shadowBlur = 0
-    ctx.fillStyle = '#2f7cf6'
+    ctx.fillStyle = '#10b5a5'
     ctx.beginPath()
     ctx.moveTo(0, -12)
     ctx.lineTo(8, 8)
@@ -261,6 +261,79 @@ export class Minimap {
     ctx.closePath()
     ctx.fill()
     ctx.restore()
+
+    // Waze-style current-road pill near the car
+    if (state.roadName) {
+      let label = state.roadName
+      ctx.font = '700 12px "Helvetica Neue", Arial, sans-serif'
+      let tw = ctx.measureText(label).width
+      if (tw > 156) {
+        ctx.font = '700 10.5px "Helvetica Neue", Arial, sans-serif'
+        tw = ctx.measureText(label).width
+      }
+      while (tw > 168 && label.length > 8) {
+        label = label.slice(0, -2)
+        tw = ctx.measureText(label + '…').width
+      }
+      if (label !== state.roadName) label += '…'
+      const pillW = Math.min(190, tw + 20)
+      const pillH = 21
+      const px = cx - pillW / 2
+      const py = cy + 29
+      ctx.save()
+      ctx.fillStyle = 'rgba(255,255,255,0.96)'
+      ctx.shadowColor = 'rgba(30,25,18,0.25)'
+      ctx.shadowBlur = 7
+      ctx.shadowOffsetY = 2
+      ctx.beginPath()
+      ctx.roundRect(px, py, pillW, pillH, 10)
+      ctx.fill()
+      ctx.shadowBlur = 0
+      ctx.fillStyle = '#1f1e1b'
+      ctx.font = '700 12px "Helvetica Neue", Arial, sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(label, cx, py + pillH / 2 + 0.5)
+      ctx.restore()
+    }
+
+    // nearest traffic light icon (Waze-ish)
+    if (this.data.signals && this.data.signals.length) {
+      let best = null
+      let bestD = 260
+      for (const [sxw, szw] of this.data.signals) {
+        const d = Math.hypot(sxw - state.x, szw - state.z)
+        if (d < bestD) { bestD = d; best = [sxw, szw] }
+      }
+      if (best) {
+        const [sxm, sym] = this.toMap(best[0], best[1])
+        const dx = (sxm - carX) * k
+        const dy = (sym - carY) * k
+        const cos = Math.cos(state.yaw)
+        const sin = Math.sin(state.yaw)
+        const sx = cx + dx * cos - dy * sin
+        const sy = cy + dx * sin + dy * cos
+        if (sx > 14 && sx < W - 14 && sy > 68 && sy < H * 0.60) {
+          ctx.save()
+          ctx.translate(sx, sy)
+          ctx.fillStyle = 'rgba(12,13,15,0.94)'
+          ctx.strokeStyle = 'rgba(255,255,255,0.9)'
+          ctx.lineWidth = 1.5
+          ctx.beginPath()
+          ctx.roundRect(-6, -12, 12, 24, 4)
+          ctx.fill()
+          ctx.stroke()
+          const dots = [['#ff453a', -6.8], ['#ffcc00', 0], ['#34c759', 6.8]]
+          for (const [col, oy] of dots) {
+            ctx.fillStyle = col
+            ctx.beginPath()
+            ctx.arc(0, oy, 2.1, 0, Math.PI * 2)
+            ctx.fill()
+          }
+          ctx.restore()
+        }
+      }
+    }
 
     // if the destination is off the phone map, leave a small edge arrow
     if (destScreen && (destScreen.x < 14 || destScreen.x > W - 14 || destScreen.y < 58 || destScreen.y > H * 0.65)) {

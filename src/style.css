@@ -449,6 +449,74 @@ kbd {
 .phone-search svg { flex: none; color: #827d74; }
 #phone-search-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+.navigating .phone-search { display: none; }
+.navigating .phone-status { color: rgba(255, 255, 255, 0.78); z-index: 9; }
+.navigating .phone-signal { color: rgba(255, 255, 255, 0.52); }
+.navigating .phone-signal b { color: rgba(255, 255, 255, 0.88); }
+
+.nav-banner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 60px;
+  padding: 17px 9px 8px;
+  background: rgba(7, 8, 10, 0.97);
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.3);
+}
+.nav-banner.hidden { display: none; }
+.banner-arrow {
+  flex: none;
+  width: 28px;
+  text-align: center;
+  font-size: 26px;
+  line-height: 1;
+  color: #fff;
+  font-weight: 400;
+}
+.banner-copy { min-width: 0; display: flex; flex-direction: column; }
+#banner-dist { font-size: 15px; font-weight: 750; line-height: 1.02; letter-spacing: 0.01em; color: #fff; }
+#banner-road {
+  max-width: 145px;
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  color: #4cc2ff;
+}
+
+.phone-speed {
+  position: absolute;
+  left: 8px;
+  bottom: 45%;
+  z-index: 5;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(29, 31, 33, 0.9);
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+}
+.phone-speed b { font-size: 10px; font-weight: 750; line-height: 1; }
+.phone-speed small { margin-top: 1px; font-size: 4.6px; font-weight: 600; letter-spacing: 0.06em; color: rgba(255, 255, 255, 0.58); }
+
+.waze-arrival { margin-top: 3px; font-size: 17px; font-weight: 750; line-height: 1.05; letter-spacing: -0.01em; color: #24231f; }
+.waze-summary { margin: 2px 0 5px; font-size: 8px; font-weight: 600; color: #777168; letter-spacing: 0.01em; }
+
+
 .phone-sheet {
   position: absolute;
   left: 0;
@@ -871,6 +939,15 @@ body.touch #steering, body.touch #pedals, body.touch #controls-right { display: 
   .dest-sub { display: none; }
   .dest-dist { font-size: 6.2px; }
   .osm-credit { font-size: 4.3px; padding-top: 1px; }
+  .nav-banner { min-height: 43px; padding: 14px 6px 5px; gap: 4px; }
+  .banner-arrow { width: 18px; font-size: 17px; }
+  #banner-dist { font-size: 10px; }
+  #banner-road { font-size: 6.6px; max-width: 78px; margin-top: 1px; }
+  .phone-speed { width: 25px; height: 25px; left: 5px; bottom: 46%; border-width: 1.5px; }
+  .phone-speed b { font-size: 7.5px; }
+  .phone-speed small { font-size: 3.4px; }
+  .waze-arrival { font-size: 12px; margin-top: 2px; }
+  .waze-summary { font-size: 6.4px; margin: 1px 0 3px; }
   #nav-dest-name { font-size: 8.6px; }
   #nav-dest-sub { font-size: 5.4px; }
   .nav-stats { font-size: 6px; margin: 3px 0 4px; }

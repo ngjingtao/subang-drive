@@ -94,7 +94,7 @@ The cockpit free-look gently recenters when you let go. Night switches on the he
 - **Real driving feel** — arcade handling with speed-sensitive steering, automatic gears, engine/tyre audio synthesised with Web Audio, body roll, off-road drag, building collisions, handbrake slides and impact shake.
 - **Three cameras** — cockpit, chase and hood.
 - **Living light** — golden hour, sunset and night, with real-time shadows, street-lamp glow, lit windows, headlight cones and a starry sky.
-- **Waze-style phone navigation** — a phone-shaped map with heading-up tracking, a destination picker (**Home, Nido Child Care, USJ 3 Playground, USJ 9 Park**), blue route line, ETA/distance and next-turn instructions. The phone also has STOP / CHANGE and an OpenStreetMap credit.
+- **Waze-style phone navigation** — a phone-shaped map with heading-up tracking, black turn banner, purple route line, current-road pill, traffic-light markers, speed bubble, destination picker (**Home, Nido Child Care, USJ 3 Playground, USJ 9 Park**), ETA/distance and next-turn instructions. The phone also has STOP / CHANGE and an OpenStreetMap credit.
 - **Road guide & HUD** — amber lane-guide chevrons when not navigating, a FOLLOW ROAD / JUNCTION / next-turn chip, speed, gear, RPM arc, and a live road-name plate with a route badge at the bottom of the screen.
 - **Tablet / phone ready** — responsive HUD, large multi-touch pedals and steering pads, safe-area awareness, portrait rotate prompt, installable PWA, automatic quality scaling if the frame rate drops.
 
