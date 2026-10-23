@@ -2443,19 +2443,33 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     const one = new THREE.Vector3(1, 1, 1)
     const up = new THREE.Vector3(0, 1, 0)
     data.signals.forEach(([x, z], i) => {
-      const yaw = hash2(x, z) * Math.PI * 2
+      // OSM signal nodes are usually on the road centreline. Put the pole on
+      // the verge instead of leaving it standing in the traffic lane.
+      const near = nearestRoadInfo(x, z)
+      let sx = x
+      let sz = z
+      let yaw = hash2(x, z) * Math.PI * 2
+      if (near) {
+        const side = hash2(x * 1.7, z * 2.3) > 0.5 ? 1 : -1
+        const nx = Math.cos(near.angle) * side
+        const nz = -Math.sin(near.angle) * side
+        const offset = near.width / 2 + 0.72
+        sx = near.cx + nx * offset
+        sz = near.cz + nz * offset
+        yaw = Math.atan2(-nx, -nz)
+      }
       q.setFromAxisAngle(up, yaw)
-      p.set(x, 0, z)
+      p.set(sx, 0, sz)
       m.compose(p, q, one)
       poles.setMatrixAt(i, m)
-      p.set(x, 0, z)
+      p.set(sx, 0, sz)
       m.compose(p, q, one)
       heads.setMatrixAt(i, m)
       qLamp.setFromAxisAngle(up, yaw + Math.PI)
       const offX = -0.155 * Math.sin(yaw)
       const offZ = -0.155 * Math.cos(yaw)
       const lampAt = (mesh, y) => {
-        p.set(x + offX, y, z + offZ)
+        p.set(sx + offX, y, sz + offZ)
         m.compose(p, qLamp, one)
         mesh.setMatrixAt(i, m)
       }
@@ -2565,7 +2579,10 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
   }
 
   /* ---------------- expose ---------------- */
-  const collision = new BuildingCollision(data.buildings)
+  // building=roof is an open canopy (LRT platforms, bus stations, petrol
+  // station canopies). Its footprint must not act as a solid wall across the
+  // road underneath.
+  const collision = new BuildingCollision(data.buildings.filter((b) => b.k !== 'roof'))
 
   function setNight(n) {
     windowUniforms.uNight.value = n
