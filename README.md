@@ -1,5 +1,7 @@
 # Subang Drive
 
+**Live:** <https://subang-drive-usj3.onrender.com>
+
 A free-roam 3D driving game set in **USJ 3, Subang Jaya, Selangor** — built around the Google Maps pin at `3.0448217, 101.5589111`.
 
 Drive real OpenStreetMap roads, past actual building footprints, in a right-hand-drive cockpit inspired by the **2014 Toyota Vios**. Golden hour, sunset and night; touch controls for iPad and Android; works offline after the first load.
@@ -150,21 +152,17 @@ The larger map has 48k buildings and loads in roughly 10 seconds on a modern mac
 
 ## Deploying
 
-The repo is ready for **Render Static Site** using the included `render.yaml`.
+The repo is deployed as a **Render Static Site** using the included `render.yaml` (Blueprint-managed, auto-deploy on every push to `main`).
 
-1. Push the repo to GitHub (the intended remote is `git@github.com:ngjingtao/subang-drive.git`):
-   ```bash
-   git push -u origin main
-   ```
-2. In Render: **New → Blueprint**, connect the repository, then **Apply**. The blueprint uses:
-   - build: `npm ci && npm run build`
-   - publish: `dist`
-   - SPA rewrite to `index.html`
-   - no-cache for `sw.js`, immutable caching for hashed assets
-3. The service is defined as `subang-drive-usj3`, so the URL will be
-   `https://subang-drive-usj3.onrender.com` (Render may add a suffix if the name is taken).
+- Live: <https://subang-drive-usj3.onrender.com>
+- GitHub: <https://github.com/ngjingtao/subang-drive>
+- Build: `npm ci && npm run build`
+- Publish: `dist`
+- SPA rewrite to `index.html`
+- No-cache for `sw.js`, immutable caching for hashed assets
+- The 9.8 MB map is committed in `public/data/`, so Render does not call OpenStreetMap during a deploy.
 
-Alternatively, create a Render **Static Site** manually with the same build command and publish directory. The 9.8 MB map is committed in `public/data/`, so Render does not need to call OpenStreetMap during a deploy.
+To redeploy manually: **Render → Blueprint → subang-drive → Manual sync**, or push another commit to `main`.
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/ngjingtao/subang-drive)
 
