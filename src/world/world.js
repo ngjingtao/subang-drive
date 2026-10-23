@@ -213,7 +213,15 @@ function bridgeDeckHeight(road) {
 function makeBridgeProfile(road) {
   const { points, length } = resamplePolyline(road.p, 6)
   const deck = bridgeDeckHeight(road)
-  const heights = points.map((p) => deck * smoothstep(p.t))
+  // The old profile only ramped UP from the first point, leaving the bridge
+  // deck at full height at the far end (a half-bridge cut in mid-air).
+  // Ramp up at the start and back down at the end with a flat deck between.
+  const ramp = 0.25
+  const heights = points.map((p) => {
+    const up = Math.min(1, p.t / ramp)
+    const down = Math.min(1, (1 - p.t) / ramp)
+    return deck * Math.min(smoothstep(up), smoothstep(down))
+  })
   const coords = points.map((p) => [p.x, p.z])
   return { points, coords, heights, deck, length }
 }
@@ -1228,7 +1236,7 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
   /* ---------------- bridges ---------------- */
   const concreteMat = new THREE.MeshStandardMaterial({ color: 0xb9b7ae, roughness: 0.9, metalness: 0.04 })
   const pierMat = new THREE.MeshStandardMaterial({ color: 0x8f8d86, roughness: 0.95 })
-  const underMat = new THREE.MeshStandardMaterial({ color: 0x2e3032, roughness: 0.95, side: THREE.DoubleSide })
+  const underMat = new THREE.MeshStandardMaterial({ color: 0x77746c, roughness: 0.95, side: THREE.DoubleSide })
   const parapetGeos = []
   const pierGeos = []
   const underGeos = []
@@ -1264,6 +1272,18 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
         g.rotateY(angle)
         g.translate(mx + nx * half * side, my, mz + nz * half * side)
         parapetGeos.push(g)
+
+        // Deep side fascia closes the gap between the road deck and the
+        // underside, so a flyover reads as a solid box-girder bridge rather
+        // than a thin slab with a hollow black underside.
+        const fascia = new THREE.BoxGeometry(0.24, 0.62, len + 0.08)
+        fascia.rotateY(angle)
+        fascia.translate(
+          mx + nx * half * side,
+          my - 0.52,
+          mz + nz * half * side,
+        )
+        parapetGeos.push(fascia)
       }
 
       bridgeSegments.push({
