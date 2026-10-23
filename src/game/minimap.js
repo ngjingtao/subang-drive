@@ -1,46 +1,55 @@
 const AREA_COLORS = {
-  residential: '#181b1a',
-  commercial: '#202120',
-  retail: '#222221',
-  industrial: '#1f211f',
-  construction: '#242119',
-  greenfield: '#22301c',
-  brownfield: '#231f18',
-  grass: '#22331d',
-  park: '#24371f',
-  wood: '#1d2e18',
-  scrub: '#212f1b',
-  cemetery: '#23281d',
-  pitch: '#223a22',
-  playground: '#2c291e',
-  parking: '#1a1c1c',
-  water: '#12313e',
+  residential: '#e4e0d6',
+  commercial: '#e8e4da',
+  retail: '#e9e5db',
+  industrial: '#dfdbd2',
+  construction: '#e0d6c8',
+  greenfield: '#d6e6c7',
+  brownfield: '#ded6c6',
+  grass: '#d3e4c4',
+  park: '#cfe4c1',
+  wood: '#c3dcb7',
+  scrub: '#d0e1c2',
+  cemetery: '#d8e0cf',
+  pitch: '#c4e2ba',
+  playground: '#e7dcc7',
+  parking: '#ddd9d0',
+  water: '#b5e1f1',
 }
 
 const ROAD_COLORS = {
-  motorway: '#c8a45d',
-  trunk: '#c8a45d',
-  primary: '#b08f52',
-  secondary: '#969b95',
-  tertiary: '#7c837c',
-  unclassified: '#68706a',
-  residential: '#5e6660',
-  living_street: '#5e6660',
-  service: '#484e4a',
-  motorway_link: '#a98f57',
-  trunk_link: '#a98f57',
-  primary_link: '#a98f57',
-  secondary_link: '#8b918b',
-  tertiary_link: '#7c837c',
-  raceway: '#6d756e',
-  road: '#5e6660',
+  motorway: '#ffcf70',
+  trunk: '#ffcf70',
+  primary: '#ffdda0',
+  secondary: '#fff3cf',
+  tertiary: '#ffffff',
+  unclassified: '#ffffff',
+  residential: '#ffffff',
+  living_street: '#ffffff',
+  service: '#f7f3e9',
+  motorway_link: '#ffdda0',
+  trunk_link: '#ffdda0',
+  primary_link: '#ffdda0',
+  secondary_link: '#fff3cf',
+  tertiary_link: '#ffffff',
+  raceway: '#ffffff',
+  road: '#ffffff',
 }
 
+/**
+ * Waze-like phone map. The circular minimap is gone: the map now lives in a
+ * phone-shaped panel with heading-up rotation, a destination picker and a
+ * blue route line.
+ */
 export class Minimap {
   constructor(data) {
-    this.canvas = document.getElementById('minimap')
+    this.canvas = document.getElementById('phone-map')
     this.ctx = this.canvas.getContext('2d')
     this.data = data
+    this.W = 360
+    this.H = 640
+    this.canvas.width = this.W
+    this.canvas.height = this.H
     this.size = 3072
     this.bounds = data.meta.bounds
     this.worldW = this.bounds.maxX - this.bounds.minX
@@ -49,7 +58,8 @@ export class Minimap {
     this.scale = this.size / this.span
     this.offsetX = (this.size - this.worldW * this.scale) / 2
     this.offsetY = (this.size - this.worldH * this.scale) / 2
-    this.viewMeters = 620
+    this.viewMeters = 650
+    this.nav = null
     this.build()
   }
 
@@ -66,109 +76,85 @@ export class Minimap {
     c.height = this.size
     const ctx = c.getContext('2d')
 
-    // base
-    ctx.fillStyle = '#0c1210'
-    ctx.fillRect(0, 0, this.size, this.size)
-    const g = ctx.createRadialGradient(this.size / 2, this.size / 2, 50, this.size / 2, this.size / 2, this.size * 0.65)
-    g.addColorStop(0, 'rgba(28,42,35,0.9)')
-    g.addColorStop(1, 'rgba(8,12,10,0.9)')
-    ctx.fillStyle = g
+    ctx.fillStyle = '#e9e7df'
     ctx.fillRect(0, 0, this.size, this.size)
 
-    // areas
+    // land use
     for (const area of this.data.areas) {
-      const pts = area.p
-      if (!pts || pts.length < 3) continue
+      if (!area.p || area.p.length < 3) continue
       ctx.beginPath()
-      for (let i = 0; i < pts.length; i++) {
-        const [x, y] = this.toMap(pts[i][0], pts[i][1])
+      for (let i = 0; i < area.p.length; i++) {
+        const [x, y] = this.toMap(area.p[i][0], area.p[i][1])
         if (i === 0) ctx.moveTo(x, y)
         else ctx.lineTo(x, y)
       }
       ctx.closePath()
-      ctx.fillStyle = AREA_COLORS[area.k] || '#171a19'
+      ctx.fillStyle = AREA_COLORS[area.k] || '#e4e0d6'
       ctx.fill()
     }
 
-    // paths
+    // footpaths and rail
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
     for (const path of this.data.paths) {
-      if (path.p.length < 2) continue
+      if (!path.p || path.p.length < 2) continue
       ctx.beginPath()
       for (let i = 0; i < path.p.length; i++) {
         const [x, y] = this.toMap(path.p[i][0], path.p[i][1])
         if (i === 0) ctx.moveTo(x, y)
         else ctx.lineTo(x, y)
       }
-      ctx.strokeStyle = path.t === 'railway' ? '#4b4c46' : '#343b36'
-      ctx.lineWidth = path.t === 'railway' ? 1.6 : 1.1
+      ctx.strokeStyle = path.t === 'railway' ? '#b9b3a7' : '#d8d2c5'
+      ctx.lineWidth = path.t === 'railway' ? 1.6 : 1.2
       ctx.stroke()
     }
 
-    // roads: casing then fill
+    // roads: casing then white/yellow fill
     for (const road of this.data.roads) {
-      if (road.p.length < 2) continue
-      const width = Math.max(1.5, road.w * this.scale * 0.9)
-      this.strokeRoad(ctx, road.p, width + 2.2, 'rgba(0,0,0,0.55)')
-      this.strokeRoad(ctx, road.p, width, ROAD_COLORS[road.t] || '#5e6660')
+      if (!road.p || road.p.length < 2) continue
+      const width = Math.max(1.4, road.w * this.scale * 0.95)
+      this.strokeRoad(ctx, road.p, width + 2.0, 'rgba(177,170,157,0.55)')
+    }
+    for (const road of this.data.roads) {
+      if (!road.p || road.p.length < 2) continue
+      const width = Math.max(1.4, road.w * this.scale * 0.95)
+      this.strokeRoad(ctx, road.p, width, ROAD_COLORS[road.t] || '#ffffff')
     }
 
-    // a hint of the highway
-    for (const road of this.data.roads) {
-      if (!['motorway', 'trunk'].includes(road.t)) continue
-      this.strokeRoad(ctx, road.p, 1.0, 'rgba(255,220,150,0.42)')
-    }
-
-    this.drawRefBadges(ctx)
+    // subtle edge vignette so the white map does not blow out
+    const vg = ctx.createRadialGradient(this.size / 2, this.size / 2, this.size * 0.2, this.size / 2, this.size / 2, this.size * 0.7)
+    vg.addColorStop(0, 'rgba(0,0,0,0)')
+    vg.addColorStop(1, 'rgba(98,88,70,0.10)')
+    ctx.fillStyle = vg
+    ctx.fillRect(0, 0, this.size, this.size)
 
     this.mapCanvas = c
   }
 
-  drawRefBadges(ctx) {
-    const groups = new Map()
-    for (const road of this.data.roads) {
-      const ref = (road.ref || '').match(/^E\d+/)?.[0]
-      if (!ref || !['E5', 'E6'].includes(ref)) continue
-      let len = 0
-      for (let i = 0; i < road.p.length - 1; i++) {
-        len += Math.hypot(road.p[i + 1][0] - road.p[i][0], road.p[i + 1][1] - road.p[i][1])
-      }
-      if (len < 80) continue
-      if (!groups.has(ref)) groups.set(ref, [])
-      groups.get(ref).push({ road, len })
-    }
-
-    for (const [ref, list] of groups) {
-      list.sort((a, b) => b.len - a.len)
-      const picked = []
-      for (const item of list) {
-        if (picked.length >= 2) break
-        const mid = item.road.p[Math.floor(item.road.p.length / 2)]
-        if (picked.some((p) => Math.hypot(p[0] - mid[0], p[1] - mid[1]) < 140)) continue
-        picked.push(mid)
-      }
-      for (const [x, z] of picked) {
-        const [px, py] = this.toMap(x, z)
-        const w = 34
-        const h = 20
-        ctx.save()
-        ctx.translate(px, py)
-        ctx.fillStyle = 'rgba(20,74,124,0.94)'
-        ctx.strokeStyle = 'rgba(255,255,255,0.82)'
-        ctx.lineWidth = 2
-        ctx.beginPath()
-        ctx.roundRect(-w / 2, -h / 2, w, h, 5)
-        ctx.fill()
-        ctx.stroke()
-        ctx.fillStyle = 'rgba(255,255,255,0.96)'
-        ctx.font = '700 13px "Helvetica Neue", Arial, sans-serif'
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        ctx.fillText(ref, 0, 1)
-        ctx.restore()
-      }
-    }
+  drawHighwayShield(ctx, ref) {
+    const roads = this.data.roads.filter((r) => (r.ref || '').startsWith(ref))
+    if (!roads.length) return
+    roads.sort((a, b) => (b.p?.length || 0) - (a.p?.length || 0))
+    const road = roads[0]
+    const p = road.p[Math.floor(road.p.length / 2)]
+    const [x, y] = this.toMap(p[0], p[1])
+    const w = 94
+    const h = 42
+    ctx.save()
+    ctx.translate(x, y)
+    ctx.fillStyle = '#2e6fae'
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)'
+    ctx.lineWidth = 3
+    ctx.beginPath()
+    ctx.roundRect(-w / 2, -h / 2, w, h, 8)
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = '#fff'
+    ctx.font = '700 25px "Helvetica Neue", Arial, sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(ref, 0, 1)
+    ctx.restore()
   }
 
   strokeRoad(ctx, pts, width, color) {
@@ -183,63 +169,142 @@ export class Minimap {
     ctx.stroke()
   }
 
-  draw(state) {
+  setNav(nav) {
+    this.nav = nav
+  }
+
+  draw(state, nav = this.nav) {
     const ctx = this.ctx
-    const W = this.canvas.width
-    const H = this.canvas.height
-    const [px, py] = this.toMap(state.x, state.z)
-    const srcSize = this.viewMeters * this.scale
-    const sx = px - srcSize / 2
-    const sy = py - srcSize / 2
+    const W = this.W
+    const H = this.H
+    const [carX, carY] = this.toMap(state.x, state.z)
+    const cx = W / 2
+    const cy = H * 0.46
+    const srcW = this.viewMeters * this.scale
+    const k = W / srcW
+    const D = Math.hypot(W, H) * 1.10
+    const srcSize = D / k
 
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, W, H)
-    ctx.save()
-    ctx.beginPath()
-    ctx.arc(W / 2, H / 2, W / 2 - 2, 0, Math.PI * 2)
-    ctx.clip()
-
-    // dark backing outside map extent
-    ctx.fillStyle = '#0a0f0d'
+    ctx.fillStyle = '#e9e7df'
     ctx.fillRect(0, 0, W, H)
-    ctx.drawImage(this.mapCanvas, sx, sy, srcSize, srcSize, 0, 0, W, H)
 
-    // heading cone
     ctx.save()
-    ctx.translate(W / 2, H / 2)
-    ctx.rotate(-state.yaw)
-    const cone = ctx.createLinearGradient(0, 0, 0, -80)
-    cone.addColorStop(0, 'rgba(255,200,87,0.34)')
-    cone.addColorStop(1, 'rgba(255,200,87,0)')
-    ctx.fillStyle = cone
-    ctx.beginPath()
-    ctx.moveTo(0, 0)
-    ctx.arc(0, 0, 80, -Math.PI / 2 - 0.3, -Math.PI / 2 + 0.3)
-    ctx.closePath()
-    ctx.fill()
+    ctx.translate(cx, cy)
+    ctx.rotate(state.yaw)
+    ctx.imageSmoothingEnabled = true
+    ctx.drawImage(
+      this.mapCanvas,
+      carX - srcSize / 2,
+      carY - srcSize / 2,
+      srcSize,
+      srcSize,
+      -D / 2,
+      -D / 2,
+      D,
+      D,
+    )
 
-    // player arrow
-    ctx.beginPath()
-    ctx.moveTo(0, -9)
-    ctx.lineTo(6.5, 7)
-    ctx.lineTo(0, 4)
-    ctx.lineTo(-6.5, 7)
-    ctx.closePath()
-    ctx.fillStyle = '#ffc857'
-    ctx.shadowColor = 'rgba(255,200,87,0.9)'
-    ctx.shadowBlur = 10
-    ctx.fill()
-    ctx.shadowBlur = 0
-    ctx.strokeStyle = 'rgba(255,255,255,0.8)'
-    ctx.lineWidth = 1.2
-    ctx.stroke()
+    if (nav && nav.route && nav.route.points.length > 1) {
+      const pts = nav.route.points
+      ctx.beginPath()
+      for (let i = 0; i < pts.length; i++) {
+        const x = (this.toMap(pts[i].x, pts[i].z)[0] - carX) * k
+        const y = (this.toMap(pts[i].x, pts[i].z)[1] - carY) * k
+        if (i === 0) ctx.moveTo(x, y)
+        else ctx.lineTo(x, y)
+      }
+      ctx.lineCap = 'round'
+      ctx.lineJoin = 'round'
+      ctx.strokeStyle = 'rgba(255,255,255,0.96)'
+      ctx.lineWidth = 12
+      ctx.stroke()
+      ctx.strokeStyle = '#2f7cf6'
+      ctx.lineWidth = 7.2
+      ctx.stroke()
+    }
     ctx.restore()
 
-    // subtle van dyke vignette
-    const vg = ctx.createRadialGradient(W / 2, H / 2, W * 0.3, W / 2, H / 2, W * 0.52)
-    vg.addColorStop(0, 'rgba(0,0,0,0)')
-    vg.addColorStop(1, 'rgba(0,0,0,0.45)')
-    ctx.fillStyle = vg
-    ctx.fillRect(0, 0, W, H)
+    // destination pin, upright and not rotated with the map
+    let destScreen = null
+    if (nav && nav.dest) {
+      const [dxm, dym] = this.toMap(nav.dest.x, nav.dest.z)
+      const dx = (dxm - carX) * k
+      const dy = (dym - carY) * k
+      const cos = Math.cos(state.yaw)
+      const sin = Math.sin(state.yaw)
+      const sx = cx + dx * cos - dy * sin
+      const sy = cy + dx * sin + dy * cos
+      destScreen = { x: sx, y: sy }
+      if (sx > 16 && sx < W - 16 && sy > 64 && sy < H * 0.64) {
+        this.drawPin(ctx, sx, sy, nav.dest.color || '#e2557f')
+      }
+    }
+
+    // car marker (heading is always up in this view)
+    ctx.save()
+    ctx.translate(cx, cy)
+    ctx.shadowColor = 'rgba(30, 40, 55, 0.45)'
+    ctx.shadowBlur = 10
+    ctx.fillStyle = '#ffffff'
+    ctx.beginPath()
+    ctx.arc(0, 0, 16, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.shadowBlur = 0
+    ctx.fillStyle = '#2f7cf6'
+    ctx.beginPath()
+    ctx.moveTo(0, -12)
+    ctx.lineTo(8, 8)
+    ctx.lineTo(0, 4)
+    ctx.lineTo(-8, 8)
+    ctx.closePath()
+    ctx.fill()
+    ctx.restore()
+
+    // if the destination is off the phone map, leave a small edge arrow
+    if (destScreen && (destScreen.x < 14 || destScreen.x > W - 14 || destScreen.y < 58 || destScreen.y > H * 0.65)) {
+      const ax = Math.max(18, Math.min(W - 18, destScreen.x))
+      const ay = Math.max(88, Math.min(H * 0.60, destScreen.y))
+      ctx.save()
+      ctx.translate(ax, ay)
+      ctx.fillStyle = nav.dest?.color || '#e2557f'
+      ctx.beginPath()
+      ctx.arc(0, 0, 7, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.strokeStyle = '#fff'
+      ctx.lineWidth = 2
+      ctx.stroke()
+      ctx.restore()
+    }
+  }
+
+  drawPin(ctx, x, y, color) {
+    ctx.save()
+    ctx.translate(x, y)
+    ctx.shadowColor = 'rgba(40, 25, 30, 0.35)'
+    ctx.shadowBlur = 8
+    ctx.shadowOffsetY = 2
+    ctx.fillStyle = color
+    ctx.beginPath()
+    ctx.arc(0, -9, 9, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.beginPath()
+    ctx.moveTo(-6, -3)
+    ctx.lineTo(6, -3)
+    ctx.lineTo(0, 9)
+    ctx.closePath()
+    ctx.fill()
+    ctx.shadowBlur = 0
+    ctx.strokeStyle = 'rgba(255,255,255,0.95)'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.arc(0, -9, 9, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.fillStyle = '#fff'
+    ctx.beginPath()
+    ctx.arc(0, -9, 3.2, 0, Math.PI * 2)
+    ctx.fill()
     ctx.restore()
   }
 }

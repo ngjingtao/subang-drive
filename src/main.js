@@ -10,6 +10,8 @@ import { HUD } from './game/hud.js'
 import { Minimap } from './game/minimap.js'
 import { CarAudio } from './game/audio.js'
 import { chevronTexture } from './world/textures.js'
+import { RoadRouter } from './game/router.js'
+import { DESTINATIONS } from './game/destinations.js'
 
 /* Older iPadOS Safari does not have CanvasRenderingContext2D.roundRect. */
 if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.roundRect) {
@@ -99,6 +101,10 @@ let exterior = null
 let interior = null
 let physics = null
 let minimap = null
+let router = null
+let nav = null
+let navUiLast = 0
+let destinationTimer = 0
 let preset = null
 let presetIndex = 0
 let sunDir = new THREE.Vector3(0, 1, 0)
@@ -227,6 +233,9 @@ async function init() {
   physics.reset(world.spawn)
 
   minimap = new Minimap(data)
+  router = new RoadRouter(data.roads)
+  router.build()
+  initPhoneUi()
   input = new Input(canvas, { onAction: handleAction })
 
   // mirror
@@ -260,7 +269,8 @@ async function init() {
   updateCarVisual()
   updateCamera(0, true)
   hud.update(physics)
-  minimap.draw(physics)
+  minimap.draw(physics, null)
+  updateDestinationDistances()
 
   setProgress(100, 'Sedia.')
   await nextFrame(220)
@@ -301,6 +311,8 @@ function applyTime(index, { silent = false } = {}) {
     for (const l of headlights) l.intensity = preset.night > 0.1 ? 160 + preset.night * 900 : 0
   }
   hud.setTimeLabel(preset.clock)
+  const phoneClock = document.getElementById('phone-clock')
+  if (phoneClock) phoneClock.textContent = preset.clock
   const dawn = document.getElementById('dawn')
   if (dawn) dawn.classList.toggle('on', preset.dawn > 0.5)
   if (!silent) hud.toast(`${preset.label} · ${preset.clock}`)
@@ -333,6 +345,7 @@ function handleAction(action) {
     case 'respawn':
       if (!running) return
       physics.reset(world.spawn)
+      stopNavigation()
       input?.recenterLook()
       cameraSnap = true
       hud.toast(`Respawned · ${world.spawn.name || 'USJ 3'}`)
@@ -374,7 +387,7 @@ function setPaused(value) {
 
 function updateRoadGuide() {
   if (!guideGroup) return
-  if (!running || paused || orientationBlocked || !physics.onRoad) {
+  if (!running || paused || orientationBlocked || !physics.onRoad || nav) {
     guideGroup.visible = false
     return
   }
@@ -543,6 +556,155 @@ function updateSun() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Waze phone UI                                                        */
+/* ------------------------------------------------------------------ */
+
+function formatDistance(metres) {
+  if (metres == null || !Number.isFinite(metres)) return '—'
+  if (metres < 950) return `${Math.max(10, Math.round(metres / 10) * 10)} m`
+  return `${(metres / 1000).toFixed(1)} km`
+}
+
+function formatEta(metres) {
+  if (metres == null || !Number.isFinite(metres)) return '—'
+  const mins = Math.max(1, Math.round(metres / 520))
+  return `${mins} min`
+}
+
+function initPhoneUi() {
+  const list = document.getElementById('dest-list')
+  if (!list) return
+  list.innerHTML = DESTINATIONS.map(
+    (d) => `<button class="dest-row" data-dest="${d.id}" type="button">
+      <span class="dest-icon" style="background:${d.color}24;color:${d.color}">${d.icon}</span>
+      <span class="dest-text"><span class="dest-name">${d.name}</span><span class="dest-sub">${d.sub}</span></span>
+      <span class="dest-dist" data-dist="${d.id}">—</span>
+    </button>`,
+  ).join('')
+
+  list.addEventListener('click', (event) => {
+    const row = event.target.closest('[data-dest]')
+    if (!row) return
+    const dest = DESTINATIONS.find((d) => d.id === row.dataset.dest)
+    if (dest) selectDestination(dest)
+  })
+
+  const search = document.getElementById('phone-search')
+  search?.addEventListener('click', () => {
+    if (nav) {
+      stopNavigation()
+    } else {
+      updateDestinationDistances()
+      hud.toast('Pick a destination on the phone', 1800)
+    }
+  })
+  document.getElementById('nav-stop')?.addEventListener('click', () => stopNavigation())
+  document.getElementById('nav-change')?.addEventListener('click', () => stopNavigation())
+}
+
+function updateDestinationDistances() {
+  if (!router || !physics) return
+  for (const dest of DESTINATIONS) {
+    const el = document.querySelector(`[data-dist="${dest.id}"]`)
+    if (!el) continue
+    const route = router.route({ x: physics.x, z: physics.z }, dest, dest.name)
+    el.textContent = route ? formatDistance(route.distance) : '—'
+  }
+}
+
+function selectDestination(dest, { reroute = false } = {}) {
+  if (!router) return
+  const route = router.route({ x: physics.x, z: physics.z }, dest, dest.name)
+  if (!route) {
+    hud.toast(`No route found to ${dest.name}`, 2400)
+    return
+  }
+  nav = {
+    dest,
+    route,
+    arrived: false,
+    offSince: 0,
+    lastReroute: 0,
+  }
+  minimap.setNav(nav)
+  document.getElementById('phone-search-text').textContent = dest.name
+  document.getElementById('nav-dest-name').textContent = dest.name
+  document.getElementById('nav-dest-sub').textContent = dest.sub
+  document.getElementById('dest-panel').classList.add('hidden')
+  document.getElementById('nav-panel').classList.remove('hidden')
+  document.getElementById('phone').classList.add('navigating')
+  navUiLast = 0
+  updateNavUi({ along: 0, off: 0 })
+  if (!reroute) hud.toast(`Navigating to ${dest.name}`, 2500)
+}
+
+function stopNavigation() {
+  nav = null
+  minimap.setNav(null)
+  document.getElementById('phone-search-text').textContent = 'Where to?'
+  document.getElementById('dest-panel').classList.remove('hidden')
+  document.getElementById('nav-panel').classList.add('hidden')
+  document.getElementById('phone').classList.remove('navigating')
+  updateDestinationDistances()
+}
+
+function updateNavigation(now) {
+  if (!nav) return
+  const progress = router.progress(nav.route, physics.x, physics.z)
+  const remaining = Math.max(0, nav.route.distance - progress.along)
+  nav.remaining = remaining
+  nav.off = progress.off
+
+  if (!nav.arrived && remaining < 28) {
+    nav.arrived = true
+    hud.toast(`Arrived at ${nav.dest.name}`, 3500)
+  }
+
+  // If the driver leaves the line, quietly recompute from where they are.
+  if (!nav.arrived && progress.off > 55 && physics.speedKmh > 4) {
+    if (!nav.offSince) nav.offSince = now
+    else if (now - nav.offSince > 2400 && now - nav.lastReroute > 6000) {
+      nav.lastReroute = now
+      selectDestination(nav.dest, { reroute: true })
+      return
+    }
+  } else {
+    nav.offSince = 0
+  }
+
+  if (now - navUiLast > 240 || nav.arrived) {
+    navUiLast = now
+    updateNavUi(progress)
+  }
+}
+
+function updateNavUi(progress) {
+  if (!nav) return
+  const remaining = Math.max(0, nav.route.distance - (progress?.along || 0))
+  const next = router.nextInstruction(nav.route, progress?.along || 0)
+  const icons = { start: '↑', continue: '↑', left: '↰', right: '↱', uturn: '↺', arrive: '⚑' }
+
+  document.getElementById('nav-dist').textContent = nav.arrived ? 'Arrived' : formatDistance(remaining)
+  document.getElementById('nav-eta').textContent = nav.arrived ? '' : formatEta(remaining)
+
+  let text = 'You have arrived'
+  let icon = '⚑'
+  if (!nav.arrived) {
+    if (!next || next.type === 'arrive') {
+      text = `Arrive at ${nav.dest.name}`
+      icon = '⚑'
+    } else {
+      const d = Math.max(0, next.at - (progress?.along || 0))
+      text = `${formatDistance(d)} · ${next.text}`
+      icon = icons[next.type] || '↑'
+    }
+  }
+  document.getElementById('nav-turn-icon').textContent = icon
+  document.getElementById('nav-next-text').textContent = text
+  hud.setGuide(`${icon} ${text}`, true)
+}
+
+/* ------------------------------------------------------------------ */
 /* start / pause                                                       */
 /* ------------------------------------------------------------------ */
 
@@ -563,6 +725,7 @@ async function startGame() {
   hud.toast(`Free roam · ${world.spawn.name || 'USJ 3'}`, 3000)
   audio.setMuted(audio.muted)
   requestWakeLock()
+  updateDestinationDistances()
   checkOrientation()
   lastTime = performance.now()
 }
@@ -578,6 +741,7 @@ async function requestWakeLock() {
 document.getElementById('resume').addEventListener('click', () => setPaused(false))
 document.getElementById('respawn').addEventListener('click', () => {
   physics.reset(world.spawn)
+  stopNavigation()
   setPaused(false)
   input.recenterLook()
   cameraSnap = true
@@ -649,16 +813,23 @@ function loop(now) {
     })
     hud.setLocation(physics.roadName || (physics.onRoad ? 'Jalan tanpa nama' : 'Off the tarmac'), 'USJ 3 · Subang Jaya', physics.roadRef)
     hud.update(physics)
-    const junction = world.junctionInfoAt(physics.x, physics.z)
-    if (!physics.onRoad) hud.setGuide('OFF ROAD', false)
-    else if (junction.signal) hud.setGuide('TRAFFIC LIGHT · U-TURN ALLOWED', true)
-    else if (junction.near) hud.setGuide('JUNCTION · U-TURN ALLOWED', true)
-    else hud.setGuide('FOLLOW ROAD', false)
+    if (!nav) {
+      const junction = world.junctionInfoAt(physics.x, physics.z)
+      if (!physics.onRoad) hud.setGuide('OFF ROAD', false)
+      else if (junction.signal) hud.setGuide('TRAFFIC LIGHT · U-TURN ALLOWED', true)
+      else if (junction.near) hud.setGuide('JUNCTION · U-TURN ALLOWED', true)
+      else hud.setGuide('FOLLOW ROAD', false)
+    }
     if (physics.turnBlocked && now > turnHintAt) {
       hud.toast('U-turn only at junctions or traffic lights', 2200)
       turnHintAt = now + 3000
     }
-    minimap.draw(physics)
+    updateNavigation(now)
+    if (!nav && now > destinationTimer) {
+      destinationTimer = now + 8000
+      updateDestinationDistances()
+    }
+    minimap.draw(physics, nav)
   } else if (!running) {
     updateCarVisual()
   }
@@ -714,6 +885,7 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('beforeunload', () => {
   wakeLock?.release?.().catch(() => {})
 })
+
 
 
 

@@ -10,6 +10,8 @@ Drive real OpenStreetMap roads, past actual building footprints, in a right-hand
 
 ![Chase camera](docs/chase.jpg)
 
+![Waze-style phone navigation](docs/phone.jpg)
+
 ![E5 flyover over E6](docs/flyover.jpg)
 
 ![Night drive](docs/night.jpg)
@@ -67,6 +69,13 @@ Open the printed Network URL. On iPad use **Share → Add to Home Screen**; on A
 
 The cockpit free-look gently recenters when you let go. Night switches on the headlights, taillights, street lamps and lit windows.
 
+### Phone navigation
+
+- Tap the **phone map** destinations: Home (the original Google Maps pin), **Nido Child Care** (Jalan USJ 9/3E), USJ 3 Playground and USJ 9 Park.
+- The map is heading-up; the blue line is a real road-network route, not a straight line. It shows distance, ETA and the next turn, and reroutes if you leave the route.
+- **STOP** ends guidance; **CHANGE** goes back to the destination picker.
+- The destinations live in `src/game/destinations.js` — edit `home` if your actual home is a different point.
+
 ### Road guide & turn rules
 
 - Amber chevrons follow the current lane and a top-centre chip shows **FOLLOW ROAD**.
@@ -85,7 +94,8 @@ The cockpit free-look gently recenters when you let go. Night switches on the he
 - **Real driving feel** — arcade handling with speed-sensitive steering, automatic gears, engine/tyre audio synthesised with Web Audio, body roll, off-road drag, building collisions, handbrake slides and impact shake.
 - **Three cameras** — cockpit, chase and hood.
 - **Living light** — golden hour, sunset and night, with real-time shadows, street-lamp glow, lit windows, headlight cones and a starry sky.
-- **Road guide & HUD** — amber lane-guide chevrons, a FOLLOW ROAD / JUNCTION chip, a circular minimap with heading and E5/E6 badges, speed, gear, RPM arc, and a live road-name plate with a route badge at the bottom of the screen.
+- **Waze-style phone navigation** — a phone-shaped map with heading-up tracking, a destination picker (**Home, Nido Child Care, USJ 3 Playground, USJ 9 Park**), blue route line, ETA/distance and next-turn instructions. The phone also has STOP / CHANGE and an OpenStreetMap credit.
+- **Road guide & HUD** — amber lane-guide chevrons when not navigating, a FOLLOW ROAD / JUNCTION / next-turn chip, speed, gear, RPM arc, and a live road-name plate with a route badge at the bottom of the screen.
 - **Tablet / phone ready** — responsive HUD, large multi-touch pedals and steering pads, safe-area awareness, portrait rotate prompt, installable PWA, automatic quality scaling if the frame rate drops.
 
 ---

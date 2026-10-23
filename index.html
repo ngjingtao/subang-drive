@@ -101,11 +101,41 @@
 
         <div id="roadguide"><span class="gchev">»</span><span id="guide-text">FOLLOW ROAD</span></div>
 
-        <div id="minimap-wrap">
-          <canvas id="minimap" width="240" height="240"></canvas>
-          <span class="north">N</span>
-          <div class="minimap-ring"></div>
-          <span class="osm">© OSM</span>
+        <div id="phone">
+          <div class="phone-bezel">
+            <div class="phone-screen">
+              <canvas id="phone-map" aria-label="Navigation map"></canvas>
+              <div class="phone-notch"></div>
+              <div class="phone-status">
+                <span id="phone-clock">4:42</span>
+                <span class="phone-signal">▂▄▆ <b>100%</b></span>
+              </div>
+              <button id="phone-search" class="phone-search" aria-label="Choose a destination">
+                <svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true"><path d="M10 2a8 8 0 1 0 4.9 14.3l5.4 5.4 1.4-1.4-5.4-5.4A8 8 0 0 0 10 2zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12z" fill="currentColor"/></svg>
+                <span id="phone-search-text">Where to?</span>
+              </button>
+              <div id="phone-sheet" class="phone-sheet">
+                <div class="sheet-handle"></div>
+                <div id="dest-panel">
+                  <div class="sheet-head"><span>Where to?</span><small>Nearby</small></div>
+                  <div id="dest-list"></div>
+                  <div class="osm-credit">© OpenStreetMap</div>
+                </div>
+                <div id="nav-panel" class="hidden">
+                  <div class="nav-dest">
+                    <span id="nav-dest-name">—</span>
+                    <small id="nav-dest-sub"></small>
+                  </div>
+                  <div class="nav-stats"><span id="nav-dist">—</span><i></i><span id="nav-eta">—</span></div>
+                  <div class="nav-next"><span id="nav-turn-icon">↑</span><span id="nav-next-text">—</span></div>
+                  <div class="nav-buttons">
+                    <button id="nav-stop">STOP</button>
+                    <button id="nav-change">CHANGE</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div id="speedo">
