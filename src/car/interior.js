@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
-import { clusterTexture, radioTexture, emblemTexture, makeLabelTexture } from '../world/textures.js'
+import { clusterTexture, emblemTexture, makeLabelTexture } from '../world/textures.js'
 
 function std(opts) {
   return new THREE.MeshStandardMaterial(opts)
@@ -37,6 +37,133 @@ function beam(a, b, thickness, material) {
 const EYE = new THREE.Vector3(0.365, 1.235, 0.46)
 const WHEEL_CENTER = new THREE.Vector3(0.365, 0.94, -0.38)
 
+function createDashScreen() {
+  const W = 640
+  const H = 384
+  const canvas = document.createElement('canvas')
+  canvas.width = W
+  canvas.height = H
+  const ctx = canvas.getContext('2d')
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  let last = ''
+
+  const rounded = (x, y, w, h, r) => {
+    ctx.beginPath()
+    ctx.roundRect(x, y, w, h, r)
+  }
+
+  function draw(speed = 0, gear = 'P') {
+    const key = `${Math.round(speed)}|${gear}`
+    if (key === last) return
+    last = key
+
+    ctx.textBaseline = 'alphabetic'
+    ctx.fillStyle = '#05070b'
+    ctx.fillRect(0, 0, W, H)
+    const bg = ctx.createLinearGradient(0, 0, W, H)
+    bg.addColorStop(0, 'rgba(18,40,66,0.65)')
+    bg.addColorStop(0.5, 'rgba(6,10,16,0.1)')
+    bg.addColorStop(1, 'rgba(18,10,30,0.5)')
+    ctx.fillStyle = bg
+    ctx.fillRect(0, 0, W, H)
+
+    // top status row
+    ctx.fillStyle = 'rgba(255,255,255,0.7)'
+    ctx.font = '500 19px "Helvetica Neue", Arial, sans-serif'
+    ctx.textAlign = 'left'
+    ctx.fillText('4:42', 26, 34)
+    ctx.textAlign = 'right'
+    ctx.fillText('28°C   BT   ▂▄▆', W - 26, 34)
+    ctx.fillStyle = 'rgba(100,190,255,0.75)'
+    ctx.font = '700 17px "Helvetica Neue", Arial, sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillText('SUBANG DRIVE', W / 2, 34)
+
+    // ambient glow behind the car
+    const glow = ctx.createRadialGradient(W / 2, 150, 10, W / 2, 150, 220)
+    glow.addColorStop(0, 'rgba(28,115,220,0.35)')
+    glow.addColorStop(1, 'rgba(20,60,130,0)')
+    ctx.fillStyle = glow
+    ctx.fillRect(0, 50, W, 230)
+
+    // simple blue car front
+    ctx.save()
+    ctx.translate(W / 2, 148)
+    ctx.fillStyle = 'rgba(0,0,0,0.35)'
+    ctx.beginPath()
+    ctx.ellipse(0, 52, 100, 16, 0, 0, Math.PI * 2)
+    ctx.fill()
+    const body = ctx.createLinearGradient(0, -35, 0, 58)
+    body.addColorStop(0, '#36a8ff')
+    body.addColorStop(0.55, '#1459c8')
+    body.addColorStop(1, '#0a317b')
+    ctx.fillStyle = body
+    rounded(-96, -18, 192, 76, 22)
+    ctx.fill()
+    ctx.fillStyle = '#081525'
+    rounded(-70, -50, 140, 44, 14)
+    ctx.fill()
+    ctx.fillStyle = 'rgba(90,190,255,0.28)'
+    rounded(-61, -43, 122, 30, 9)
+    ctx.fill()
+    ctx.fillStyle = '#09121d'
+    rounded(-64, 14, 128, 24, 8)
+    ctx.fill()
+    ctx.fillStyle = '#d9f5ff'
+    rounded(-82, 21, 28, 7, 3)
+    ctx.fill()
+    rounded(54, 21, 28, 7, 3)
+    ctx.fill()
+    ctx.fillStyle = '#030507'
+    ctx.beginPath()
+    ctx.arc(-72, 58, 12, 0, Math.PI * 2)
+    ctx.arc(72, 58, 12, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+
+    // speed
+    ctx.fillStyle = '#ffffff'
+    ctx.font = '800 54px "Helvetica Neue", Arial, sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'alphabetic'
+    ctx.fillText(String(Math.round(speed)), W / 2 - 14, 283)
+    ctx.fillStyle = 'rgba(190,220,255,0.65)'
+    ctx.font = '600 15px "Helvetica Neue", Arial, sans-serif'
+    ctx.fillText('km/h', W / 2 + 58, 282)
+    ctx.fillStyle = '#ffc857'
+    ctx.font = '700 16px "Helvetica Neue", Arial, sans-serif'
+    ctx.fillText(gear === 'P' ? 'P' : gear, W / 2 + 100, 270)
+
+    // app tiles
+    const apps = [
+      ['MAP', '#1f7ed8'],
+      ['MEDIA', '#d74376'],
+      ['PHONE', '#2fb673'],
+      ['RADIO', '#8b5bd6'],
+    ]
+    const tw = 78
+    const gap = 18
+    const total = apps.length * tw + (apps.length - 1) * gap
+    let ax = (W - total) / 2
+    for (const [label, col] of apps) {
+      ctx.fillStyle = col
+      rounded(ax, 310, tw, 48, 12)
+      ctx.fill()
+      ctx.fillStyle = 'rgba(255,255,255,0.92)'
+      ctx.font = '700 11px "Helvetica Neue", Arial, sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(label, ax + tw / 2, 334)
+      ax += tw + gap
+    }
+    tex.needsUpdate = true
+  }
+
+  draw(0, 'P')
+  return { tex, draw }
+}
+
 export function createInterior() {
   const group = new THREE.Group()
   group.name = 'vios-interior'
@@ -53,9 +180,13 @@ export function createInterior() {
   const fabric = std({ color: 0x24282e, roughness: 0.95 })
   const fabricDark = std({ color: 0x1c2025, roughness: 0.96 })
   const stitching = std({ color: 0x682520, roughness: 0.8 })
-  const headliner = std({ color: 0x625f5a, roughness: 0.96 })
+  const headliner = std({ color: 0x6b6863, roughness: 0.96 })
+  const pillarMat = std({ color: 0x6c6963, roughness: 0.95 })
+  const pink = std({ color: 0xd13767, roughness: 0.62, metalness: 0.05 })
+  const matBlack = std({ color: 0x0b0c0e, roughness: 1 })
   const carpet = std({ color: 0x131416, roughness: 1 })
-  const screenMat = new THREE.MeshBasicMaterial({ map: radioTexture(), toneMapped: false })
+  const dashScreen = createDashScreen()
+  const screenMat = new THREE.MeshBasicMaterial({ map: dashScreen.tex, toneMapped: false })
   const clusterMat = new THREE.MeshBasicMaterial({ map: clusterTexture(), toneMapped: false })
   const needleMat = new THREE.MeshBasicMaterial({ color: 0xff5a2e, toneMapped: false })
   const amberLed = new THREE.MeshBasicMaterial({ color: 0xff7a2a, toneMapped: false })
@@ -66,6 +197,24 @@ export function createInterior() {
   const dashTop = rbox(1.5, 0.13, 0.62, dashTopMat, 0.05, 3)
   dashTop.position.set(0, 0.94, -0.68)
   group.add(dashTop)
+
+  // pink-trimmed dashboard mat from the owner's car
+  const dashMat = rbox(0.7, 0.012, 0.3, matBlack, 0.025)
+  dashMat.position.set(-0.32, 1.007, -0.63)
+  group.add(dashMat)
+  const matEdge = (w, d, x, z) => {
+    const e = box(w, 0.006, d, pink)
+    e.position.set(x, 1.016, z)
+    group.add(e)
+  }
+  matEdge(0.7, 0.008, -0.32, -0.477)
+  matEdge(0.7, 0.008, -0.32, -0.783)
+  matEdge(0.008, 0.306, -0.672, -0.63)
+  matEdge(0.008, 0.306, 0.032, -0.63)
+  // pink piping along the dashboard edge
+  const pinkLine = box(1.38, 0.006, 0.008, pink)
+  pinkLine.position.set(0, 1.006, -0.383)
+  group.add(pinkLine)
 
   const dashFace = rbox(1.47, 0.34, 0.13, dash, 0.04, 3)
   dashFace.position.set(0, 0.82, -0.43)
@@ -135,7 +284,7 @@ export function createInterior() {
       toneMapped: false,
     }),
   )
-  viosBadge.position.set(-0.29, 0.758, -0.36)
+  viosBadge.position.set(-0.29, 0.735, -0.36)
   group.add(viosBadge)
 
   /* ---------------- centre stack ---------------- */
@@ -146,57 +295,37 @@ export function createInterior() {
   stack.position.set(0, 0.79, -0.365)
   group.add(stack)
 
-  // top air vents
-  for (const side of [-1, 1]) {
-    const vent = rbox(0.11, 0.08, 0.02, panel, 0.01)
-    vent.position.set(side * 0.075, 0.96, -0.335)
-    group.add(vent)
-    for (let i = 0; i < 3; i++) {
-      const slat = box(0.085, 0.005, 0.004, piano)
-      slat.position.set(side * 0.075, 0.938 + i * 0.021, -0.322)
-      group.add(slat)
-    }
-  }
+  // aftermarket Android-style head unit (the screen from the owner's car)
+  const screenGroup = new THREE.Group()
+  screenGroup.position.set(0.02, 0.91, -0.335)
+  screenGroup.rotation.x = -0.08
+  const screenTrim = rbox(0.348, 0.212, 0.012, silver, 0.008)
+  screenTrim.position.z = 0.016
+  const screenFrame = rbox(0.336, 0.2, 0.026, piano, 0.012)
+  screenFrame.position.z = 0.004
+  const screenFace = new THREE.Mesh(new THREE.PlaneGeometry(0.32, 0.185), screenMat)
+  screenFace.position.z = 0.026
+  screenGroup.add(screenTrim, screenFrame, screenFace)
+  group.add(screenGroup)
 
-  // hazard button
-  const hazard = box(0.045, 0.014, 0.012, hazardMat)
-  hazard.position.set(0, 0.915, -0.32)
-  group.add(hazard)
-
-  // radio screen
-  const radio = new THREE.Mesh(new THREE.PlaneGeometry(0.255, 0.115), screenMat)
-  radio.position.set(0, 0.83, -0.336)
-  group.add(radio)
-  const radioGlass = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.27, 0.13),
-    new THREE.MeshStandardMaterial({ color: 0x08090b, roughness: 0.05, metalness: 0.4 }),
-  )
-  radioGlass.position.set(0, 0.83, -0.332)
-  group.add(radioGlass)
-  radio.renderOrder = 3
-
-  // radio knobs
-  for (const side of [-1, 1]) {
-    const knob = cylinder(0.017, 0.019, 0.025, panel, 14)
-    knob.rotation.x = Math.PI / 2
-    knob.position.set(side * 0.14, 0.79, -0.33)
-    group.add(knob)
-  }
-  // small buttons row
-  for (let i = 0; i < 6; i++) {
-    const b = box(0.024, 0.012, 0.006, panel)
-    b.position.set(-0.09 + i * 0.036, 0.755, -0.334)
-    group.add(b)
-  }
+  // magnetic phone mount under the screen
+  const phoneArm = box(0.014, 0.08, 0.014, panel)
+  phoneArm.position.set(0.02, 0.79, -0.30)
+  const phoneMount = cylinder(0.03, 0.03, 0.022, panel, 20)
+  phoneMount.rotation.x = Math.PI / 2
+  phoneMount.position.set(0.02, 0.75, -0.295)
+  const mountRing = new THREE.Mesh(new THREE.TorusGeometry(0.032, 0.004, 8, 20), silver)
+  mountRing.position.set(0.02, 0.75, -0.29)
+  group.add(phoneArm, phoneMount, mountRing)
 
   // climate controls
   const climate = rbox(0.3, 0.12, 0.02, panel, 0.01)
-  climate.position.set(0, 0.655, -0.36)
+  climate.position.set(0, 0.69, -0.36)
   group.add(climate)
   for (let i = 0; i < 3; i++) {
     const knob = cylinder(0.027, 0.027, 0.026, silver, 18)
     knob.rotation.x = Math.PI / 2
-    knob.position.set(-0.085 + i * 0.085, 0.655, -0.34)
+    knob.position.set(-0.085 + i * 0.085, 0.69, -0.34)
     group.add(knob)
     const cap = cylinder(0.017, 0.017, 0.03, piano, 14)
     cap.rotation.x = Math.PI / 2
@@ -317,9 +446,16 @@ export function createInterior() {
   const spokeB = box(0.04, 0.16, 0.026, spokeMat)
   spokeB.position.y = -0.085
   wheelSpin.add(spokeB)
-  const spokeSilver = box(0.045, 0.1, 0.018, silver)
+  const spokeSilver = box(0.022, 0.09, 0.018, silver)
   spokeSilver.position.set(0, -0.1, 0.02)
   wheelSpin.add(spokeSilver)
+  const vLeft = box(0.115, 0.012, 0.018, silver)
+  vLeft.position.set(-0.06, -0.06, 0.02)
+  vLeft.rotation.z = 0.72
+  const vRight = box(0.115, 0.012, 0.018, silver)
+  vRight.position.set(0.06, -0.06, 0.02)
+  vRight.rotation.z = -0.72
+  wheelSpin.add(vLeft, vRight)
   // thumb grips
   for (const side of [-1, 1]) {
     const grip = rbox(0.08, 0.05, 0.03, spokeMat, 0.015)
@@ -423,10 +559,10 @@ export function createInterior() {
   consoleBody.position.set(0, 0.62, 0.25)
   group.add(consoleBody)
   const consoleTop = rbox(0.3, 0.05, 0.95, panel, 0.02)
-  consoleTop.position.set(0, 0.79, 0.22)
+  consoleTop.position.set(0, 0.785, 0.22)
   group.add(consoleTop)
-  const consoleFront = rbox(0.32, 0.28, 0.26, dash, 0.03)
-  consoleFront.position.set(0, 0.72, -0.18)
+  const consoleFront = rbox(0.32, 0.24, 0.3, dash, 0.03)
+  consoleFront.position.set(0, 0.68, -0.30)
   group.add(consoleFront)
 
   // shifter
@@ -520,7 +656,7 @@ export function createInterior() {
       new THREE.Vector3(side * 0.68, 1.01, -0.87),
       new THREE.Vector3(side * 0.63, 1.42, -0.3),
       0.068,
-      dashLight,
+      pillarMat,
     )
     group.add(ap)
     const bp = beam(
@@ -542,7 +678,7 @@ export function createInterior() {
   const ceiling = box(1.38, 0.014, 1.44, headliner)
   ceiling.position.set(0, 1.427, 0.46)
   group.add(ceiling)
-  const header = rbox(1.4, 0.07, 0.11, dash, 0.02)
+  const header = rbox(1.4, 0.07, 0.11, headliner, 0.02)
   header.position.set(0, 1.395, -0.31)
   group.add(header)
 
@@ -620,6 +756,7 @@ export function createInterior() {
     needleTach.rotation.z = Math.PI * 0.75 - Math.PI * 1.5 * rpmT
 
     drawDigital(state.gearLabel, state.speedKmh, Math.floor(state.distance / 1000))
+    dashScreen.draw(state.speedKmh, state.gearLabel)
     if (state.gearLabel !== lastGear) {
       lastGear = state.gearLabel
       const tilt = { P: -0.12, R: -0.06, N: 0, D: 0.07 }[state.gearLabel] ?? 0
