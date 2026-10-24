@@ -993,6 +993,24 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
   const maxAniso = renderer.capabilities.getMaxAnisotropy()
   const bounds = data.meta.bounds
   const terrainAt = (x, z) => terrainHeightAt(data, x, z)
+  const nidoRoute = Array.isArray(data.nidoRoute) ? data.nidoRoute : []
+  const routeDistanceAt = (x, z) => {
+    if (nidoRoute.length < 2) return Infinity
+    let best = Infinity
+    for (let i = 0; i < nidoRoute.length - 1; i++) {
+      const [ax, az] = nidoRoute[i]
+      const [bx, bz] = nidoRoute[i + 1]
+      const dx = bx - ax
+      const dz = bz - az
+      const l2 = dx * dx + dz * dz
+      if (l2 < 1e-6) continue
+      let t = ((x - ax) * dx + (z - az) * dz) / l2
+      t = Math.max(0, Math.min(1, t))
+      const d = Math.hypot(x - (ax + dx * t), z - (az + dz * t))
+      if (d < best) best = d
+    }
+    return best
+  }
 
   /* ---------------- terrain ---------------- */
   const grass = grassTexture()
@@ -1900,12 +1918,13 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
 
     const houseLike = kind === 0
     const industrial = kind === 3
-    const detailNear = data.spawn
+    const onNidoRoute = routeDistanceAt(cx, cz) < (mobile ? 105 : 165)
+    const detailNear = (data.spawn
       ? Math.hypot(cx - data.spawn.x, cz - data.spawn.z) < (mobile ? 950 : 1500)
-      : false
-    const detailShops = data.spawn
+      : false) || onNidoRoute
+    const detailShops = (data.spawn
       ? Math.hypot(cx - data.spawn.x, cz - data.spawn.z) < (mobile ? 1800 : 2600)
-      : false
+      : false) || onNidoRoute
 
     // Real Malaysian terraces have pitched tiled roofs; warehouses get a shallow gable.
     if (houseLike || industrial) {
@@ -2194,6 +2213,76 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     detailBaseY = prevBase
   }
 
+  function addNidoCampus() {
+    const p = data.nido
+    if (!p) return
+    const prevBase = detailBaseY
+    const base = terrainAt(p.x, p.z)
+    detailBaseY = base
+    const near = frontRoadInfo(p.x, p.z)
+    let fx = 1
+    let fz = 0
+    if (near && near.dist > 0.25) {
+      fx = (near.cx - p.x) / near.dist
+      fz = (near.cz - p.z) / near.dist
+    }
+    const tx = -fz
+    const tz = fx
+    const yaw = Math.atan2(-tz, tx)
+    const at = (along, front) => [p.x + tx * along + fx * front, p.z + tz * along + fz * front]
+    const panel = (along, color) => {
+      const [x, z] = at(along, 6.35)
+      addDetailBox(landmarkBatch, x, 0.62, z, 2.75, 1.24, 0.14, yaw, color)
+    }
+    // Colourful childcare fence with an open gate at the frontage.
+    panel(-5.4, '#4f9b94')
+    panel(-2.7, '#e7be4d')
+    panel(2.7, '#e7be4d')
+    panel(5.4, '#4f9b94')
+    for (const along of [-6.7, -1.35, 1.35, 6.7]) {
+      const [x, z] = at(along, 6.35)
+      addDetailBox(landmarkBatch, x, 0.7, z, 0.16, 1.4, 0.16, yaw, '#205b56')
+    }
+    for (const along of [-4.0, 4.0]) {
+      const [x, z] = at(along, 3.15)
+      addDetailBox(landmarkBatch, x, 0.07, z, 3.7, 0.1, 3.0, yaw, '#82b9a8')
+    }
+    // Small play deck, tower and slide behind the fence.
+    {
+      const [x, z] = at(-2.4, 2.7)
+      addDetailBox(landmarkBatch, x, 0.48, z, 1.4, 0.92, 1.2, yaw, '#f0c14b')
+      addDetailBox(landmarkBatch, x, 1.15, z, 1.6, 0.35, 1.4, yaw, '#d85a50')
+      const [sx, sz] = at(0.05, 2.7)
+      addDetailBox(landmarkBatch, sx, 0.62, sz, 1.9, 0.16, 0.7, yaw + 0.9, '#4e91c4')
+      addDetailBox(landmarkBatch, sx, 0.28, sz, 0.6, 0.5, 0.6, yaw, '#4e91c4')
+    }
+    // Shade canopy over the entrance.
+    {
+      const [x, z] = at(0, 4.2)
+      addDetailBox(landmarkBatch, x, 2.55, z, 4.4, 0.16, 2.1, yaw, '#f2e7c9')
+      for (const along of [-1.6, 1.6]) {
+        const [px, pz] = at(along, 3.2)
+        addDetailBox(landmarkBatch, px, 1.3, pz, 0.13, 2.6, 0.13, yaw, '#205b56')
+      }
+    }
+    // Nido frontage sign, facing the road.
+    const [signX, signZ] = at(0, 6.58)
+    const signYaw = Math.atan2(fx, fz)
+    addSignBoard(
+      'THE NIDO EARLY LEARNING',
+      'CHILDCARE CENTRE',
+      signX,
+      2.12,
+      signZ,
+      signYaw,
+      6.2,
+      1.35,
+      { bg: '#2f7f79', fg: '#ffffff', accent: '#f4c84a', dark: '#173f3a', sub: 'CHILDCARE' },
+      true,
+    )
+    detailBaseY = prevBase
+  }
+
   function addChimney(x, z, height = 16, color = '#c9c6ba', baseY = 0) {
     const geo = new THREE.CylinderGeometry(0.55, 0.85, 1, 9)
     const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.85 })
@@ -2226,6 +2315,7 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
   }
 
   // Fuel stations, pitches and POI signs are real OSM features.
+  addNidoCampus()
   const sortedPois = (data.pois || []).slice().sort((a, b) => Math.hypot(a.x - data.spawn.x, a.z - data.spawn.z) - Math.hypot(b.x - data.spawn.x, b.z - data.spawn.z))
   for (const area of data.areas) {
     if (area.k === 'pitch' || area.k === 'stadium' || area.k === 'sports') {

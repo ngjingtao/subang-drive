@@ -630,7 +630,8 @@ function updateDestinationDistances() {
     const el = document.querySelector(`[data-dist="${dest.id}"]`)
     if (!el) continue
     const heading = { x: -Math.sin(physics.yaw), z: -Math.cos(physics.yaw) }
-    const route = router.route({ x: physics.x, z: physics.z }, dest, dest.name, heading)
+    const target = { x: dest.routeX ?? dest.x, z: dest.routeZ ?? dest.z, name: dest.name }
+    const route = router.route({ x: physics.x, z: physics.z }, target, dest.name, heading)
     el.textContent = route ? formatDistance(route.distance) : '—'
   }
 }
@@ -659,7 +660,8 @@ function arrivalClock(minutesAhead) {
 function selectDestination(dest, { reroute = false } = {}) {
   if (!router) return
   const heading = { x: -Math.sin(physics.yaw), z: -Math.cos(physics.yaw) }
-  const route = router.route({ x: physics.x, z: physics.z }, dest, dest.name, heading)
+  const target = { x: dest.routeX ?? dest.x, z: dest.routeZ ?? dest.z, name: dest.name }
+  const route = router.route({ x: physics.x, z: physics.z }, target, dest.name, heading)
   if (!route) {
     hud.toast(`No route found to ${dest.name}`, 2400)
     return
@@ -702,7 +704,7 @@ function updateNavigation(now) {
   nav.remaining = remaining
   nav.off = progress.off
 
-  if (!nav.arrived && remaining < 28) {
+  if (!nav.arrived && remaining < (nav.dest.arriveRadius || 28)) {
     nav.arrived = true
     hud.toast(`Arrived at ${nav.dest.name}`, 3500)
   }

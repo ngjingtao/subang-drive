@@ -20,6 +20,9 @@ export const DESTINATIONS = [
     icon: '🧸',
     x: 3154.9,
     z: 1495.8,
+    routeX: 3165.3,
+    routeZ: 1496,
+    arriveRadius: 15,
     color: '#e2557f',
   },
   {
