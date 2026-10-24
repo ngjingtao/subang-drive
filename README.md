@@ -2,7 +2,7 @@
 
 **Live:** <https://subang-drive-usj3.onrender.com>
 
-A free-roam 3D driving game set in **USJ 3, Subang Jaya, Selangor** — built around the Google Maps pin at `3.0448217, 101.5589111`.
+A free-roam 3D driving game set in **USJ 3, Subang Jaya, Selangor** — built around the real home at **27, Jalan Pinggiran USJ 1/18** (`3.0515097, 101.5593352`).
 
 Drive real OpenStreetMap roads, past actual building footprints, in a right-hand-drive cockpit inspired by the **2014 Toyota Vios**. Golden hour, sunset and night; touch controls for iPad and Android; works offline after the first load.
 
@@ -79,7 +79,7 @@ The cockpit free-look gently recenters when you let go. Night switches on the he
 
 ### Phone navigation
 
-- Tap the **phone map** destinations: Home (the original Google Maps pin), **Nido Child Care** (Jalan USJ 13/4E), USJ 3 Playground and USJ 9 Park.
+- Tap the **phone map** destinations: Home (27, Jalan Pinggiran USJ 1/18), **Nido Child Care** (`3.0379822, 101.5877155`), USJ 3 Playground and USJ 9 Park.
 - The map is heading-up; the blue line is a real road-network route, not a straight line. It shows distance, ETA and the next turn, and reroutes if you leave the route.
 - **STOP** ends guidance; **CHANGE** goes back to the destination picker.
 - The destinations live in `src/game/destinations.js` — edit `home` if your actual home is a different point.
@@ -99,9 +99,9 @@ The cockpit free-look gently recenters when you let go. Night switches on the he
 - **20 km-radius LOD world** — a 40 × 40 km playable area centred on the home at 27, Jalan Pinggiran USJ 1/18. The inner ~10 km retains the full detailed OSM buildings, shops, landmarks, footpaths and street furniture; beyond that, the real major-road network, terrain and simplified low-poly suburbs keep the 20 km radius driveable without loading hundreds of thousands of building footprints.
 - **USJ 3 streetscape** — real OSM footprints now carry pitched tiled roofs, shophouse awnings and signboards, low front walls with metal gates, car-porch canopies, driveways, parked Malaysian compact cars and leafy front gardens. Facades use framed windows, front doors, floor bands and concrete plinths, so the two-storey terraces read like the actual neighbourhood instead of generic blocks. Details are concentrated around the start area and thin out with distance for performance.
 - **Moving traffic** — low-poly cars travel the residential and arterial roads, keep left like Malaysian traffic, and follow the bridge and terrain height profiles.
-- **Corrected destinations** — Home is **27, Jalan Pinggiran USJ 1/18**; Nido Child Care uses its actual Google Maps pin at `3.0379822, 101.5877155`.
+- **Corrected destinations** — Home is the exact address pin **27, Jalan Pinggiran USJ 1/18** at `3.0515097, 101.5593352`; Nido Child Care uses its actual Google Maps pin at `3.0379822, 101.5877155`.
 - **Real OSM landmarks** — petrol stations are modelled with branded canopies, pumps, a shop, forecourt and price pylon; schools get gate/facade name signs and sports courts; factories have chimneys, silos, loading doors and entrance signs; football/futsal fields get turf, markings, goals and fencing; mosques get domes and minarets; supermarkets and restaurants get shophouse signage. The nearest ones to the start are a Petronas station, a futsal field, a factory, a school and a mosque.
-- **Real terrain elevation** — the 20 km world uses a DEM heightfield. The home/USJ core is flattened to the local ground level, while the outer ring follows real hills and slopes; outer roads and buildings sit on the terrain.
+- **Real terrain elevation** — the 20 km world uses a real DEM heightfield centred on the exact home. The whole map, including the detailed USJ core, follows the terrain: roads, land use, water, buildings, roofs, front yards, trees, lamps, signals, signs, landmarks, bridges, traffic and the car all use the sampled ground height. Home is the 0 m reference point.
 - **Animated water** — lakes, ponds, basins, swimming pools, rivers, streams, canals and drains use a moving water shader with ripples, sky reflection, sun glints and night darkening. Deep water slows the car and leaves an expanding wake; bridge decks stay above the water.
 - **Open roofs are actually open** — OSM `building=roof` structures such as LRT station canopies, bus-station roofs and petrol canopies no longer act as solid collision walls across the road. Traffic-signal poles are also placed on the verge instead of in the traffic lane. Collision is height-aware and ignores structures whose footprint covers a road, so driving on a flyover no longer hits the roofs below, and ground traffic does not hit overhead station/bridge structures.
 - **Real OSM bridge/layer data** — the E5 (KESAS) flyover now passes over the E6 (ELITE) carriageway on a raised deck with parapets and piers, while ordinary junctions and residential streets are flat. The minimap carries E5/E6 route badges. Bridge height only follows a deck when you are on that bridge road and heading along it, so traffic crossing underneath stays at ground level instead of being lifted onto the flyover and dropped again. Flyovers ramp up and back down at both ends, with solid side fascia and a concrete underside instead of a floating black half-deck.
@@ -137,14 +137,14 @@ docs/                       screenshots
 
 ### Rebuilding the map
 
-The map snapshot is already included, so the game needs no network at runtime. To refresh it:
+The map snapshot is already included, so the game needs no network at runtime. The current world is centred on the exact home and combines a detailed OSM core with a simplified outer ring out to 20 km, plus a 257 × 257 DEM heightfield. To refresh the older core extract:
 
 ```bash
 npm run map           # use scripts/.cache/usj.osm if present
 npm run map:refresh   # download a fresh extract from the OSM API
 ```
 
-The build downloads a 3 × 3 grid of OSM API tiles covering a 7.2 × 7.2 km box around the pin (about `101.5265,3.0123 → 101.5913,3.0774`), then merges and de-duplicates the tiles. Complete ways extending beyond that box make the final data bounds roughly 10 × 10 km. The origin is the pin above; the game uses metres and `-Z = north`.
+The build downloads a 3 × 3 grid of OSM API tiles covering a 7.2 × 7.2 km box around the pin (about `101.5265,3.0123 → 101.5913,3.0774`), then merges and de-duplicates the tiles. Complete ways extending beyond that box make the final data bounds roughly 10 × 10 km. The game uses metres and `-Z = north`; the current baked world origin is the exact home above.
 
 ---
 
@@ -156,10 +156,11 @@ The larger map has 48k buildings and loads in roughly 10 seconds on a modern mac
 
 ## Credits & notes
 
-- **Map data © OpenStreetMap contributors**, licensed under the [Open Database License (ODbL 1.0)](https://www.openstreetmap.org/copyright). The map was converted from 3 × 3 OSM API tiles by `scripts/build-map.mjs`.
+- **Map data © OpenStreetMap contributors**, licensed under the [Open Database License (ODbL 1.0)](https://www.openstreetmap.org/copyright). The map was converted from OSM API tiles by `scripts/build-map.mjs`.
+- **Elevation data** from the AWS Terrain Tiles / Mapzen Terrarium dataset, converted to a local DEM heightfield.
 - Built with [Three.js](https://threejs.org/) (MIT) and [Vite](https://vitejs.dev/) (MIT).
 - This is a **fan-made, non-commercial project**. It is not affiliated with, endorsed by, or licensed by Toyota. “Toyota” and “Vios” are trademarks of Toyota Motor Corporation; the cockpit is a stylised tribute, not a licensed 3D model.
-- The vehicle handling, traffic (there is none), and city details are simplified for playability. Roads and buildings are as mapped in OpenStreetMap at the time the snapshot was generated.
+- The vehicle handling, traffic behaviour and city details are simplified for playability. Roads and buildings are as mapped in OpenStreetMap at the time the snapshot was generated.
 
 ---
 

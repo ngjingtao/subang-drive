@@ -244,7 +244,7 @@ function setGeometryColor(geo, color) {
 /* ------------------------------------------------------------------ */
 
 class BuildingCollision {
-  constructor(buildings, cell = 26) {
+  constructor(buildings, cell = 26, groundAt = () => 0) {
     this.cell = cell
     this.map = new Map()
     for (const b of buildings) {
@@ -255,7 +255,11 @@ class BuildingCollision {
         if (z < minZ) minZ = z
         if (z > maxZ) maxZ = z
       }
-      const box = { minX, maxX, minZ, maxZ, h: b.h, p: b.p }
+      let cx = 0
+      let cz = 0
+      for (const [x, z] of b.p) { cx += x; cz += z }
+      const base = groundAt(cx / b.p.length, cz / b.p.length)
+      const box = { minX, maxX, minZ, maxZ, h: b.h, base, p: b.p }
       const x0 = Math.floor(minX / cell)
       const x1 = Math.floor(maxX / cell)
       const z0 = Math.floor(minZ / cell)
@@ -278,7 +282,7 @@ class BuildingCollision {
     if (!boxes) return null
     for (const b of boxes) {
       // A car on a flyover is above the roofs of the buildings underneath.
-      if (carBase > b.h + 0.2) continue
+      if (carBase > b.base + b.h + 0.2) continue
       // cheap reject first
       if (
         pos.x < b.minX - radius || pos.x > b.maxX + radius ||
@@ -476,6 +480,8 @@ function makeDetailBatch() {
   return { pos: [], col: [] }
 }
 
+let detailBaseY = 0
+
 const BOX_CORNERS = [
   [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
   [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1],
@@ -497,10 +503,11 @@ function addDetailBox(batch, x, y, z, sx, sy, sz, yaw, hex) {
   const hy = sy / 2
   const hz = sz / 2
   const pts = []
+  const yy = y + detailBaseY
   for (const [sx0, sy0, sz0] of BOX_CORNERS) {
     const lx = sx0 * hx
     const lz = sz0 * hz
-    pts.push([x + lx * cos + lz * sin, y + sy0 * hy, z - lx * sin + lz * cos])
+    pts.push([x + lx * cos + lz * sin, yy + sy0 * hy, z - lx * sin + lz * cos])
   }
   for (const [a, b, cIdx] of BOX_FACES) {
     for (const idx of [a, b, cIdx]) {
@@ -512,7 +519,7 @@ function addDetailBox(batch, x, y, z, sx, sy, sz, yaw, hex) {
 }
 
 
-function addPitchedRoof(batch, b, frame, wallHex, roofHex, peak) {
+function addPitchedRoof(batch, b, frame, wallHex, roofHex, peak, baseY = 0) {
   const { fx, fz, ux, uz, u0, u1, v0, v1 } = frame
   const overhang = 0.34
   const uA = u0 - overhang
@@ -520,8 +527,8 @@ function addPitchedRoof(batch, b, frame, wallHex, roofHex, peak) {
   const vA = v0 - overhang
   const vB = v1 + overhang
   const vc = (vA + vB) / 2
-  const yE = b.h - 0.01
-  const yR = b.h + peak
+  const yE = b.h - 0.01 + baseY
+  const yR = b.h + peak + baseY
   const p = (uu, vv, y) => [ux * uu + fx * vv, y, uz * uu + fz * vv]
   const wall = new THREE.Color(wallHex)
   const roof = new THREE.Color(roofHex)
@@ -1075,7 +1082,12 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     geo.rotateX(-Math.PI / 2)
     const color = KIND_COLORS[area.k] || '#7d8370'
     setGeometryColor(geo, color)
-    geo.translate(0, 0.02 + (i % 7) * 0.0012, 0)
+    const pos = geo.attributes.position
+    for (let v = 0; v < pos.count; v++) {
+      pos.setY(v, terrainAt(pos.getX(v), pos.getZ(v)) + 0.02 + (i % 7) * 0.0012)
+    }
+    pos.needsUpdate = true
+    geo.computeVertexNormals()
     if (area.k === 'water') waterGeos.push(geo)
     else areaGeos.push(geo)
   })
@@ -1107,9 +1119,9 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     const waterwayGeos = []
     for (const way of data.waterways) {
       if (way.p.length < 2) continue
-      const bank = ribbon(way.p, Math.max(2.6, way.w + 2.4), 0.021, 12, 1.0)
+      const bank = ribbon(way.p, Math.max(2.6, way.w + 2.4), 0.021, 12, 1.0, way.p.map(([x, z]) => 0.021 + terrainAt(x, z)))
       if (bank) bankGeos.push(bank)
-      const geo = ribbon(way.p, way.w, 0.034, 12, 1.0)
+      const geo = ribbon(way.p, way.w, 0.034, 12, 1.0, way.p.map(([x, z]) => 0.034 + terrainAt(x, z)))
       if (geo) waterwayGeos.push(geo)
     }
     if (bankGeos.length) {
@@ -1345,12 +1357,11 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     const prof = bridgeProfiles.get(index)
     const runs = road.outer ? clipOuterRuns(road.p) : [road.p]
     for (const run of runs) {
-      const outerHeights = road.outer ? run.map(([x, z]) => 0.038 + terrainAt(x, z)) : null
+      const pts = resamplePolyline(run, 6).points.map((p) => [p.x, p.z])
+      const shoulderHeights = pts.map(([x, z]) => 0.038 + terrainAt(x, z))
       const geo = prof
-        ? ribbon(prof.coords, road.w + extra, 0.05, 10, 0.4, prof.heights.map((h) => 0.05 + h - 0.016))
-        : outerHeights
-          ? ribbon(run, road.w + extra, 0.038, 10, 0.4, outerHeights)
-          : ribbon(run, road.w + extra, 0.036, 10)
+        ? ribbon(prof.coords, road.w + extra, 0.05, 10, 0.4, prof.heights.map((h, i) => 0.05 + h - 0.016 + terrainAt(prof.coords[i][0], prof.coords[i][1])))
+        : ribbon(pts, road.w + extra, 0.038, 10, 0.4, shoulderHeights)
       if (geo) {
         setGeometryColor(geo, '#918d82')
         shoulderGeos.push(geo)
@@ -1380,12 +1391,11 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     let list = roadGroups.get(key)
     if (!list) roadGroups.set(key, (list = []))
     for (const run of runs) {
-      const outerHeights = road.outer ? run.map(([x, z]) => 0.052 + terrainAt(x, z)) : null
+      const pts = resamplePolyline(run, 6).points.map((p) => [p.x, p.z])
+      const roadHeights = pts.map(([x, z]) => 0.052 + terrainAt(x, z))
       const geo = prof
-        ? ribbon(prof.coords, road.w, 0.05, 12, 0.4, prof.heights.map((h) => 0.05 + h))
-        : outerHeights
-          ? ribbon(run, road.w, 0.052, 12, 0.4, outerHeights)
-          : ribbon(run, road.w, 0.05, 12)
+        ? ribbon(prof.coords, road.w, 0.05, 12, 0.4, prof.heights.map((h, i) => 0.05 + h + terrainAt(prof.coords[i][0], prof.coords[i][1])))
+        : ribbon(pts, road.w, 0.052, 12, 0.4, roadHeights)
       if (geo) list.push(geo)
     }
   })
@@ -1425,14 +1435,16 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
 
     // dark underside slab
     underGeos.push(
-      ribbon(prof.coords, road.w + 1.0, 0.05, 12, 0.3, prof.heights.map((h) => 0.05 + h - 0.42)),
+      ribbon(prof.coords, road.w + 1.0, 0.05, 12, 0.3, prof.heights.map((h, i) => 0.05 + h - 0.42 + terrainAt(prof.coords[i][0], prof.coords[i][1]))),
     )
 
     for (let i = 0; i < prof.coords.length - 1; i++) {
       const [ax, az] = prof.coords[i]
       const [bx, bz] = prof.coords[i + 1]
-      const ha = 0.05 + prof.heights[i]
-      const hb = 0.05 + prof.heights[i + 1]
+      const groundA = terrainAt(ax, az)
+      const groundB = terrainAt(bx, bz)
+      const ha = 0.05 + prof.heights[i] + groundA
+      const hb = 0.05 + prof.heights[i + 1] + groundB
       const dx = bx - ax
       const dz = bz - az
       const len = Math.hypot(dx, dz)
@@ -1490,7 +1502,7 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
         if (h < 2.4) continue
         for (const side of [-1, 1]) {
           const g = new THREE.BoxGeometry(0.55, h - 0.4, 0.55)
-          g.translate(p.x + side * (road.w / 2 - 0.3), (h - 0.4) / 2, p.z)
+          g.translate(p.x + side * (road.w / 2 - 0.3), terrainAt(p.x, p.z) + (h - 0.4) / 2, p.z)
           pierGeos.push(g)
         }
       }
@@ -1792,6 +1804,8 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
       return
     }
     geo.rotateX(-Math.PI / 2)
+    const baseY = terrainAt(cx, cz)
+    geo.translate(0, baseY, 0)
     geo.computeVertexNormals()
     const count = geo.attributes.position.count
     const colors = new Float32Array(count * 3)
@@ -1870,7 +1884,7 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
         const vSpan = Math.max(2, frame.v1 - frame.v0)
         const yaw = Math.atan2(-frame.uz, frame.ux)
         const layerBase = Math.max(0, Number(b.l) || 0) * 3.0
-        const roofBase = Math.max(b.b || 0, layerBase)
+        const roofBase = terrainAt(cx, cz) + Math.max(b.b || 0, layerBase)
         const roofY = roofBase + b.h
         addDetailBox(chunk.detailBatch, rx, roofY, rz, uSpan, 0.24, vSpan, yaw, roofHex)
         for (const [su, sv] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
@@ -1898,11 +1912,13 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
       const peak = houseLike
         ? 1.12 + hash2(index * 1.7, b.p[0][0]) * 0.38
         : 0.55 + hash2(index * 2.1, b.p[0][1]) * 0.35
-      addPitchedRoof(chunk.detailBatch, b, frame, wallHex, detailRoofHex, peak)
+      addPitchedRoof(chunk.detailBatch, b, frame, wallHex, detailRoofHex, peak, baseY)
     }
 
     if (detailNear && houseLike) {
+      detailBaseY = baseY
       addFrontYard(chunk.detailBatch, b, frame, near, seed, !mobile)
+      detailBaseY = 0
       if (near) {
         const frontDist = frame.v1 - (frame.v0 + frame.v1) / 2
         const yard = near.dist - near.width / 2 - frontDist
@@ -1920,10 +1936,14 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
       }
     }
     if (detailShops && kind === 1) {
+      detailBaseY = baseY
       addShopFront(chunk.detailBatch, frame, near, seed)
+      detailBaseY = 0
     }
     if (detailNear && (kind === 1 || kind === 2 || kind === 4) && !houseLike) {
+      detailBaseY = baseY
       addParapet(chunk.detailBatch, b, frame, wallHex)
+      detailBaseY = 0
     }
   })
 
@@ -1999,9 +2019,10 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     const mat = signMaterial(label, sub, style)
     const nx = Math.sin(yaw)
     const nz = Math.cos(yaw)
+    const yy = y + detailBaseY
     addDetailBox(landmarkBatch, x, y, z, width + 0.18, height + 0.16, 0.13, yaw, style.dark || '#2b2c2a')
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), mat)
-    mesh.position.set(x + nx * 0.09, y, z + nz * 0.09)
+    mesh.position.set(x + nx * 0.09, yy, z + nz * 0.09)
     mesh.rotation.y = yaw
     signGroup.add(mesh)
     if (posts) {
@@ -2031,6 +2052,8 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     const z = near.cz + dz * edge
     const yaw = Math.atan2(-dx, -dz)
     const style = signColorFor(kind)
+    const prevBase = detailBaseY
+    detailBaseY = terrainAt(x, z)
     addSignBoard(
       name,
       opts.sub || style.sub,
@@ -2043,6 +2066,7 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
       style,
       opts.posts !== false,
     )
+    detailBaseY = prevBase
   }
 
   function nearestBuildingNear(x, z, kinds, maxDist = 90) {
@@ -2079,6 +2103,8 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     const name = cleanLabel(poi.n || target.b.n || '')
     if (!name) return false
     const style = signColorFor(kind)
+    const prevBase = detailBaseY
+    detailBaseY = terrainAt(target.cx, target.cz)
     addSignBoard(name, opts.sub || style.sub, x, opts.y || Math.min(target.b.h * 0.7, 6.2), z, yaw, opts.w || 10, opts.h || 1.5, style, false)
     if (opts.dock) {
       // large roller door / loading bay on the factory frontage
@@ -2087,10 +2113,13 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
       addDetailBox(landmarkBatch, dx, 2.05, dz, Math.min(8.5, (frame.u1 - frame.u0) * 0.32), 4.1, 0.22, Math.atan2(-frame.uz, frame.ux), '#273133')
       addDetailBox(landmarkBatch, dx + fx * 1.1, 4.3, dz + fz * 1.1, Math.min(10, (frame.u1 - frame.u0) * 0.38), 0.25, 2.2, Math.atan2(-frame.uz, frame.ux), '#555b5b')
     }
+    detailBaseY = prevBase
     return true
   }
 
   function addFuelStation(poi) {
+    const prevBase = detailBaseY
+    detailBaseY = terrainAt(poi.x, poi.z)
     const name = cleanLabel(poi.n || poi.br || 'Petrol Station')
     const style = fuelBrandStyle(poi.br || poi.n || '')
     let cx = poi.x
@@ -2162,28 +2191,29 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     // small brand band on the canopy frontage
     const [bx, , bz] = local(0, 4.24, 0)
     addSignBoard(name, 'FUEL', bx, 4.06, bz, pylonYaw, 5.4, 0.62, signStyle, false)
+    detailBaseY = prevBase
   }
 
-  function addChimney(x, z, height = 16, color = '#c9c6ba') {
+  function addChimney(x, z, height = 16, color = '#c9c6ba', baseY = 0) {
     const geo = new THREE.CylinderGeometry(0.55, 0.85, 1, 9)
     const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.85 })
     const mesh = new THREE.Mesh(geo, mat)
     mesh.scale.y = height
-    mesh.position.set(x, height / 2, z)
+    mesh.position.set(x, baseY + height / 2, z)
     mesh.castShadow = true
     mesh.receiveShadow = true
     structureGroup.add(mesh)
     const bandGeo = new THREE.CylinderGeometry(0.68, 0.7, 0.8, 9)
     const band = new THREE.Mesh(bandGeo, new THREE.MeshStandardMaterial({ color: '#a84236', roughness: 0.8 }))
-    band.position.set(x, height * 0.72, z)
+    band.position.set(x, baseY + height * 0.72, z)
     structureGroup.add(band)
   }
 
-  function addSilo(x, z, radius = 2.2, height = 7) {
+  function addSilo(x, z, radius = 2.2, height = 7, baseY = 0) {
     const geo = new THREE.CylinderGeometry(radius, radius, height, 12)
     const mat = new THREE.MeshStandardMaterial({ color: '#b9bcb7', roughness: 0.6, metalness: 0.25 })
     const mesh = new THREE.Mesh(geo, mat)
-    mesh.position.set(x, height / 2, z)
+    mesh.position.set(x, baseY + height / 2, z)
     mesh.castShadow = true
     mesh.receiveShadow = true
     structureGroup.add(mesh)
@@ -2191,7 +2221,7 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
       new THREE.ConeGeometry(radius * 1.03, radius * 0.65, 12),
       new THREE.MeshStandardMaterial({ color: '#9fa39f', roughness: 0.65, metalness: 0.3 }),
     )
-    cone.position.set(x, height + radius * 0.32, z)
+    cone.position.set(x, baseY + height + radius * 0.32, z)
     structureGroup.add(cone)
   }
 
@@ -2199,7 +2229,11 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
   const sortedPois = (data.pois || []).slice().sort((a, b) => Math.hypot(a.x - data.spawn.x, a.z - data.spawn.z) - Math.hypot(b.x - data.spawn.x, b.z - data.spawn.z))
   for (const area of data.areas) {
     if (area.k === 'pitch' || area.k === 'stadium' || area.k === 'sports') {
+      let ax = 0, az = 0
+      for (const [x, z] of area.p) { ax += x; az += z }
+      detailBaseY = terrainAt(ax / area.p.length, az / area.p.length)
       addFootballField(landmarkBatch, area)
+      detailBaseY = 0
     }
   }
 
@@ -2232,8 +2266,8 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
         const ux = -fz
         const uz = fx
         const side = hash2(poi.x, poi.z) > 0.5 ? 1 : -1
-        addChimney(poi.x + ux * side * 6.5 - fx * 2.0, poi.z + uz * side * 6.5 - fz * 2.0, 14 + hash2(poi.x, poi.z) * 8)
-        if (hash2(poi.z, poi.x) > 0.6) addSilo(poi.x - ux * side * 5.5 - fx * 3.0, poi.z - uz * side * 5.5 - fz * 3.0, 1.8, 6)
+        addChimney(poi.x + ux * side * 6.5 - fx * 2.0, poi.z + uz * side * 6.5 - fz * 2.0, 14 + hash2(poi.x, poi.z) * 8, '#c9c6ba', terrainAt(poi.x, poi.z))
+        if (hash2(poi.z, poi.x) > 0.6) addSilo(poi.x - ux * side * 5.5 - fx * 3.0, poi.z - uz * side * 5.5 - fz * 3.0, 1.8, 6, terrainAt(poi.x, poi.z))
       }
     } else if ((poi.k === 'mosque' || poi.k === 'worship') && signLimits.mosque < 20) {
       placeRoadSign(poi, poi.k, { w: 6.8, y: 3.0, posts: true, sub: poi.k === 'mosque' ? 'MASJID' : 'RUMAH IBADAT' })
@@ -2266,18 +2300,19 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
       const fx = near && near.dist > 0.2 ? (near.cx - poi.x) / near.dist : 0
       const fz = near && near.dist > 0.2 ? (near.cz - poi.z) / near.dist : 1
       const yaw = Math.atan2(-fz, fx)
-      addDetailBox(landmarkBatch, poi.x, 2.4, poi.z, 10, 4.8, 7, yaw, '#ece5d5')
-      addDetailBox(landmarkBatch, poi.x + fx * 3.55, 1.3, poi.z + fz * 3.55, 0.15, 2.6, 1.2, yaw, '#263c3a')
+      const mosqueBase = terrainAt(poi.x, poi.z)
+      addDetailBox(landmarkBatch, poi.x, mosqueBase + 2.4, poi.z, 10, 4.8, 7, yaw, '#ece5d5')
+      addDetailBox(landmarkBatch, poi.x + fx * 3.55, mosqueBase + 1.3, poi.z + fz * 3.55, 0.15, 2.6, 1.2, yaw, '#263c3a')
       const dome = new THREE.Mesh(new THREE.SphereGeometry(2.8, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), domeMat)
       dome.scale.y = 0.85
-      dome.position.set(poi.x, 4.8 + 0.25, poi.z)
+      dome.position.set(poi.x, mosqueBase + 4.8 + 0.25, poi.z)
       dome.castShadow = true
       mosqueStructures.add(dome)
       const minaret = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.45, 9, 8), minaretMat)
-      minaret.position.set(poi.x + 4.8, 4.5, poi.z - 2.0)
+      minaret.position.set(poi.x + 4.8, mosqueBase + 4.5, poi.z - 2.0)
       mosqueStructures.add(minaret)
       const cap = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.2, 8), domeMat)
-      cap.position.set(poi.x + 4.8, 9.7, poi.z - 2.0)
+      cap.position.set(poi.x + 4.8, mosqueBase + 9.7, poi.z - 2.0)
       mosqueStructures.add(cap)
       if (poi.n) {
         placeRoadSign(poi, 'mosque', { w: 6.4, y: 3.0, posts: true, sub: 'SURAU' })
@@ -2298,20 +2333,21 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     const uw = frame.u1 - frame.u0
     const vw = frame.v1 - frame.v0
     const radius = Math.max(1.2, Math.min(uw, vw) * 0.30)
+    const mosqueBase = terrainAt(cx, cz)
     const dome = new THREE.Mesh(
       new THREE.SphereGeometry(radius, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2),
       domeMat,
     )
     dome.scale.y = 0.9
-    dome.position.set(cx, b.h + radius * 0.12, cz)
+    dome.position.set(cx, mosqueBase + b.h + radius * 0.12, cz)
     dome.castShadow = true
     structureGroup.add(dome)
     const minaret = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.52, 10.5, 8), minaretMat)
-    minaret.position.set(cx + frame.ux * (uw * 0.42), 5.25, cz + frame.uz * (uw * 0.42))
+    minaret.position.set(cx + frame.ux * (uw * 0.42), mosqueBase + 5.25, cz + frame.uz * (uw * 0.42))
     minaret.castShadow = true
     structureGroup.add(minaret)
     const cap = new THREE.Mesh(new THREE.ConeGeometry(0.62, 1.4, 8), domeMat)
-    cap.position.set(cx + frame.ux * (uw * 0.42), 11.2, cz + frame.uz * (uw * 0.42))
+    cap.position.set(cx + frame.ux * (uw * 0.42), mosqueBase + 11.2, cz + frame.uz * (uw * 0.42))
     structureGroup.add(cap)
   }
 
@@ -2513,12 +2549,12 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     for (let i = 0; i < trees.length; i++) {
       const t = trees[i]
       const trunkH = (1.9 + rng() * 0.9) * t.s
-      p.set(t.x, 0, t.z)
+      p.set(t.x, terrainAt(t.x, t.z), t.z)
       s.set(t.s * 0.95, trunkH, t.s * 0.95)
       m.compose(p, q, s)
       trunks.setMatrixAt(i, m)
       const cy = trunkH + 1.2 * t.s
-      p.set(t.x, cy, t.z)
+      p.set(t.x, cy + terrainAt(t.x, t.z), t.z)
       s.set(1.32 * t.s, 1.45 * t.s, 1.32 * t.s)
       m.compose(p, q, s)
       canopies.setMatrixAt(i, m)
@@ -2574,7 +2610,7 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     const greens = ['#3d562a', '#496330', '#365027', '#536d39']
     for (let i = 0; i < shrubPositions.length; i++) {
       const t = shrubPositions[i]
-      p.set(t.x, 0.34 + t.s * 0.18, t.z)
+      p.set(t.x, terrainAt(t.x, t.z) + 0.34 + t.s * 0.18, t.z)
       q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), hash2(t.x, t.z) * Math.PI * 2)
       sc.set(t.s * 1.25, t.s * 0.8, t.s * 1.25)
       m.compose(p, q, sc)
@@ -2640,13 +2676,13 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     for (let i = 0; i < lampPositions.length; i++) {
       const l = lampPositions[i]
       q.setFromAxisAngle(up, l.angle)
-      p.set(l.x, 0, l.z)
+      p.set(l.x, terrainAt(l.x, l.z), l.z)
       m.compose(p, q, s)
       poles.setMatrixAt(i, m)
       arms.setMatrixAt(i, m)
       const hx = l.x + Math.sin(l.angle) * 1.6
       const hz = l.z + Math.cos(l.angle) * 1.6
-      p.set(hx, 7.35, hz)
+      p.set(hx, terrainAt(hx, hz) + 7.35, hz)
       m.compose(p, q, s)
       heads.setMatrixAt(i, m)
       lampPositions[i].gx = hx
@@ -2661,7 +2697,7 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     const gp = new Float32Array(lampPositions.length * 3)
     lampPositions.forEach((l, i) => {
       gp[i * 3] = l.gx
-      gp[i * 3 + 1] = 7.25
+      gp[i * 3 + 1] = terrainAt(l.gx, l.gz) + 7.25
       gp[i * 3 + 2] = l.gz
     })
     const gGeo = new THREE.BufferGeometry()
@@ -2723,17 +2759,18 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
         yaw = Math.atan2(-nx, -nz)
       }
       q.setFromAxisAngle(up, yaw)
-      p.set(sx, 0, sz)
+      const signalGround = terrainAt(sx, sz)
+      p.set(sx, signalGround, sz)
       m.compose(p, q, one)
       poles.setMatrixAt(i, m)
-      p.set(sx, 0, sz)
+      p.set(sx, signalGround, sz)
       m.compose(p, q, one)
       heads.setMatrixAt(i, m)
       qLamp.setFromAxisAngle(up, yaw + Math.PI)
       const offX = -0.155 * Math.sin(yaw)
       const offZ = -0.155 * Math.cos(yaw)
       const lampAt = (mesh, y) => {
-        p.set(sx + offX, y, sz + offZ)
+        p.set(sx + offX, y + signalGround, sz + offZ)
         m.compose(p, qLamp, one)
         mesh.setMatrixAt(i, m)
       }
@@ -2768,11 +2805,11 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     const one = new THREE.Vector3(1, 1, 1)
     const up = new THREE.Vector3(0, 1, 0)
     data.busStops.forEach(([x, z], i) => {
-      pos.set(x, 1.3, z)
+      pos.set(x, terrainAt(x, z) + 1.3, z)
       m.compose(pos, q.identity(), one)
       posts.setMatrixAt(i, m)
       q.setFromAxisAngle(up, hash2(x, z) * Math.PI * 2)
-      pos.set(x, 2.5, z)
+      pos.set(x, terrainAt(x, z) + 2.5, z)
       m.compose(pos, q, one)
       signs.setMatrixAt(i, m)
     })
@@ -2972,6 +3009,8 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
   // structures or bad footprints, so they must not block ground traffic.
   const collision = new BuildingCollision(
     data.buildings.filter((b, index) => b.k !== 'roof' && !roadOverlaps.has(index)),
+    26,
+    terrainAt,
   )
 
   function setNight(n) {

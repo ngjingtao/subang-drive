@@ -252,6 +252,7 @@ async function init() {
 
   physics = new CarPhysics(world.spawn)
   physics.reset(world.spawn)
+  if (world.terrainHeightAt) physics.roadY = world.terrainHeightAt(physics.x, physics.z)
 
   minimap = new Minimap(data)
   router = new RoadRouter(data.roads)
@@ -419,7 +420,7 @@ function updateRoadGuide() {
     const s = samples[i]
     if (!s) { m.visible = false; continue }
     const h = world.bridgeHeightAt(s.x, s.z, s.dx, s.dz)
-    m.position.set(s.x, 0.05 + h + 0.035, s.z)
+    m.position.set(s.x, (world.terrainHeightAt ? world.terrainHeightAt(s.x, s.z) : 0) + 0.05 + h + 0.035, s.z)
     m.rotation.y = Math.atan2(-s.dx, -s.dz)
     m.visible = true
   }

@@ -31,6 +31,7 @@ export class CarPhysics {
     this.pitch = 0
     this.bounce = 0
     this.roadY = 0
+    this.bridgeY = 0
     this.roadPitch = 0
     this.roadSign = 0
     this.turnBlocked = false
@@ -225,19 +226,20 @@ export class CarPhysics {
     const bridgeInfo = world.bridgeInfoAt(this.x, this.z, fx, fz)
     const nearRoad = world.nearestRoadInfo(this.x, this.z)
     const bridgeRoad = nearRoad && bridgeInfo.roadIndex >= 0 && nearRoad.roadIndex === bridgeInfo.roadIndex
-    const wasUp = this.roadY > 0.3
+    const wasUp = this.bridgeY > 0.3
     // Enter a deck only at its ramp, then keep following it. This stops a car
     // on the road underneath from being lifted onto the middle of a flyover.
     const canEnter = bridgeInfo.h < 2.2
     const onBridge = bridgeInfo.h > 0.05 && (wasUp || (bridgeRoad && canEnter))
     const groundY = world.terrainHeightAt ? world.terrainHeightAt(this.x, this.z) : 0
-    this.roadY = (onBridge ? bridgeInfo.h : 0) + groundY
+    this.bridgeY = onBridge ? bridgeInfo.h : 0
+    this.roadY = this.bridgeY + groundY
     if (onBridge && bridgeInfo.name) {
       this.roadName = bridgeInfo.name
       this.roadRef = bridgeInfo.ref
     }
 
-    const inWater = this.roadY < 0.35 && world.waterAt ? world.waterAt(this.x, this.z) : false
+    const inWater = this.bridgeY < 0.35 && world.waterAt ? world.waterAt(this.x, this.z) : false
     this.inWater = !!inWater
     if (inWater) {
       // Deep water is not a road: it kills most of the momentum and makes the
@@ -246,8 +248,8 @@ export class CarPhysics {
       this.bounce = Math.min(0.03, this.bounce + Math.abs(this.speed) * 0.0009)
     }
 
-    const hf = this.roadY > 0.12 ? world.bridgeHeightAt(this.x + fx * 1.25, this.z + fz * 1.25, fx, fz) : 0
-    const hr = this.roadY > 0.12 ? world.bridgeHeightAt(this.x - fx * 1.25, this.z - fz * 1.25, fx, fz) : 0
+    const hf = this.bridgeY > 0.12 ? world.bridgeHeightAt(this.x + fx * 1.25, this.z + fz * 1.25, fx, fz) : 0
+    const hr = this.bridgeY > 0.12 ? world.bridgeHeightAt(this.x - fx * 1.25, this.z - fz * 1.25, fx, fz) : 0
     const targetRoadPitch = Math.atan2(hf - hr, 2.5)
     this.roadPitch += (targetRoadPitch - this.roadPitch) * Math.min(1, 8 * dt)
 
