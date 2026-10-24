@@ -150,10 +150,12 @@ function ribbon(points, width, y, uvScale = 12, extend = 0.6, heights = null) {
     if (i === 0) p.add(extStart)
     if (i === n - 1) p.add(extEnd)
     const nrm = normals[i]
-    const vy = heights ? heights[i] : y
+    const h = heights ? heights[i] : y
+    const hL = Array.isArray(h) ? h[0] : h
+    const hR = Array.isArray(h) ? h[1] : h
     verts.push(
-      [p.x + nrm.x * half, vy, p.y + nrm.y * half],
-      [p.x - nrm.x * half, vy, p.y - nrm.y * half],
+      [p.x + nrm.x * half, hL, p.y + nrm.y * half],
+      [p.x - nrm.x * half, hR, p.y - nrm.y * half],
     )
   }
 
@@ -176,6 +178,42 @@ function ribbon(points, width, y, uvScale = 12, extend = 0.6, heights = null) {
   geo.computeVertexNormals()
   geo.userData = { length: total }
   return geo
+}
+
+function terrainEdgeHeights(points, width, offset, terrainAt) {
+  const half = width / 2
+  const n = points.length
+  if (n < 2) return []
+  const pts = points.map((p) => new THREE.Vector2(p[0], p[1]))
+  const dirs = []
+  for (let i = 0; i < n - 1; i++) dirs.push(pts[i + 1].clone().sub(pts[i]).normalize())
+  const normals = []
+  for (let i = 0; i < n; i++) {
+    const dPrev = dirs[Math.max(0, i - 1)]
+    const dNext = dirs[Math.min(n - 2, i)]
+    const nPrev = new THREE.Vector2(-dPrev.y, dPrev.x)
+    const nNext = new THREE.Vector2(-dNext.y, dNext.x)
+    let nrm = nPrev.clone().add(nNext)
+    if (nrm.lengthSq() < 1e-6) nrm.copy(nNext)
+    else nrm.normalize()
+    let scale = 1 / Math.max(0.35, Math.abs(nrm.dot(nNext)))
+    scale = Math.min(scale, 2.0)
+    normals.push(nrm.multiplyScalar(scale))
+  }
+  const extStart = dirs[0].clone().multiplyScalar(-0.4)
+  const extEnd = dirs[n - 2].clone().multiplyScalar(0.4)
+  const out = []
+  for (let i = 0; i < n; i++) {
+    const p = pts[i].clone()
+    if (i === 0) p.add(extStart)
+    if (i === n - 1) p.add(extEnd)
+    const nrm = normals[i]
+    out.push([
+      terrainAt(p.x + nrm.x * half, p.y + nrm.y * half) + offset,
+      terrainAt(p.x - nrm.x * half, p.y - nrm.y * half) + offset,
+    ])
+  }
+  return out
 }
 
 function smoothstep(t) {
@@ -796,6 +834,8 @@ function signColorFor(kind) {
   if (kind === 'mosque' || kind === 'worship') return { bg: '#0d5a45', fg: '#ffffff', accent: '#f0d37a', sub: 'MASJID' }
   if (kind === 'hospital') return { bg: '#9a1d1d', fg: '#ffffff', accent: '#ffe0d6', sub: 'KLINIK' }
   if (kind === 'supermarket') return { bg: '#b21f2d', fg: '#ffffff', accent: '#ffe08a', sub: 'PASAR RAYA' }
+  if (kind === 'pharmacy') return { bg: '#16764a', fg: '#ffffff', accent: '#f4d65a', sub: 'FARMASI' }
+  if (kind === 'shop' || kind === 'retail') return { bg: '#244d73', fg: '#ffffff', accent: '#ffd166', sub: 'KEDAI' }
   if (kind === 'restaurant' || kind === 'cafe') return { bg: '#5a3528', fg: '#fff4dd', accent: '#f4b454', sub: 'RESTORAN' }
   return { bg: '#27343a', fg: '#ffffff', accent: '#ffc857', sub: 'SUBANG JAYA' }
 }
@@ -1381,7 +1421,7 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     const runs = road.outer ? clipOuterRuns(road.p) : [road.p]
     for (const run of runs) {
       const pts = resamplePolyline(run, 6).points.map((p) => [p.x, p.z])
-      const shoulderHeights = pts.map(([x, z]) => 0.038 + terrainAt(x, z))
+      const shoulderHeights = terrainEdgeHeights(pts, road.w + extra, 0.038, terrainAt)
       const geo = prof
         ? ribbon(prof.coords, road.w + extra, 0.05, 10, 0.4, prof.heights.map((h, i) => 0.05 + h - 0.016 + terrainAt(prof.coords[i][0], prof.coords[i][1])))
         : ribbon(pts, road.w + extra, 0.038, 10, 0.4, shoulderHeights)
@@ -1415,7 +1455,7 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     if (!list) roadGroups.set(key, (list = []))
     for (const run of runs) {
       const pts = resamplePolyline(run, 6).points.map((p) => [p.x, p.z])
-      const roadHeights = pts.map(([x, z]) => 0.052 + terrainAt(x, z))
+      const roadHeights = terrainEdgeHeights(pts, road.w, 0.052, terrainAt)
       const geo = prof
         ? ribbon(prof.coords, road.w, 0.05, 12, 0.4, prof.heights.map((h, i) => 0.05 + h + terrainAt(prof.coords[i][0], prof.coords[i][1])))
         : ribbon(pts, road.w, 0.052, 12, 0.4, roadHeights)
@@ -2076,7 +2116,7 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     const x = near.cx + dx * edge
     const z = near.cz + dz * edge
     const yaw = Math.atan2(-dx, -dz)
-    const style = signColorFor(kind)
+    const style = opts.style || signColorFor(kind)
     const prevBase = detailBaseY
     detailBaseY = terrainAt(x, z)
     addSignBoard(
@@ -2375,12 +2415,23 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
   }
 
   let fuelDone = 0
-  const signLimits = { school: 0, factory: 0, mosque: 0, hospital: 0, supermarket: 0, restaurant: 0 }
+  const signLimits = { school: 0, factory: 0, mosque: 0, hospital: 0, supermarket: 0, restaurant: 0, shop: 0, pharmacy: 0, fuel: 0 }
   for (const poi of sortedPois) {
     const d = Math.hypot(poi.x - data.spawn.x, poi.z - data.spawn.z)
     if (poi.k === 'fuel') {
       addFuelStation(poi)
       fuelDone++
+      if (routeDistanceAt(poi.x, poi.z) < 240 && signLimits.fuel < 24) {
+        const brand = fuelBrandStyle(poi.br || poi.n || '')
+        placeRoadSign(poi, 'fuel', {
+          w: 5.2,
+          y: 3.5,
+          posts: true,
+          sub: 'FUEL',
+          style: { bg: brand.main, fg: brand.light || '#ffffff', accent: brand.accent, dark: brand.dark, sub: 'FUEL' },
+        })
+        signLimits.fuel++
+      }
       continue
     }
     if (d > 2600 && routeDistanceAt(poi.x, poi.z) > 200) continue
@@ -2418,6 +2469,18 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     } else if ((poi.k === 'restaurant' || poi.k === 'cafe') && signLimits.restaurant < 20) {
       placeRoadSign(poi, 'restaurant', { w: 5.0, y: 3.2, posts: false, sub: poi.k === 'cafe' ? 'KAFE' : 'RESTORAN' })
       signLimits.restaurant++
+    } else if (poi.k === 'pharmacy' && signLimits.pharmacy < 18) {
+      placeRoadSign(poi, 'pharmacy', { w: 5.4, y: 3.25, posts: false, sub: 'FARMASI' })
+      placeFacadeSign(poi, 'pharmacy', new Set(['pharmacy', 'shop', 'retail', 'commercial']), {
+        w: 6.2, h: 1.2, y: 3.7, sub: 'FARMASI',
+      })
+      signLimits.pharmacy++
+    } else if (poi.k === 'shop' && signLimits.shop < 34) {
+      placeRoadSign(poi, 'shop', { w: 5.2, y: 3.2, posts: false, sub: 'KEDAI' })
+      placeFacadeSign(poi, 'shop', new Set(['shop', 'retail', 'commercial', 'supermarket']), {
+        w: 6.4, h: 1.2, y: 3.8, sub: 'KEDAI',
+      })
+      signLimits.shop++
     }
   }
 
