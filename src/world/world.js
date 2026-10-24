@@ -1615,8 +1615,9 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
 
   for (const path of data.paths) {
     if (path.p.length < 2) continue
+    const pathPts = resamplePolyline(path.p, 6).points.map((p) => [p.x, p.z])
     if (path.t === 'railway') {
-      const geo = ribbon(path.p, 3.2, 0.052, 8)
+      const geo = ribbon(pathPts, 3.2, 0.052, 8, 0.6, pathPts.map(([x, z]) => 0.052 + terrainAt(x, z)))
       if (geo) {
         setGeometryColor(geo, '#4a4a48')
         railGeos.push(geo)
@@ -1624,7 +1625,7 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
       continue
     }
     const w = path.t === 'cycleway' ? 2.2 : path.t === 'steps' ? 2.4 : 1.8
-    const geo = ribbon(path.p, w, 0.042, 6)
+    const geo = ribbon(pathPts, w, 0.042, 6, 0.6, pathPts.map(([x, z]) => 0.042 + terrainAt(x, z)))
     if (geo) pathGeos.push(geo)
   }
   if (pathGeos.length) {
