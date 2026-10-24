@@ -85,15 +85,24 @@ export class RoadRouter {
       adj[b].push({ to: a, w, name, ref, type, oneway: false })
     }
 
+    const roadPenalty = (road) => {
+      let penalty = 1
+      if (road.t === 'service') penalty *= 5.5
+      else if (road.t === 'unclassified') penalty *= 1.2
+      if (!road.n && !road.ref) penalty *= 1.35
+      if (/shortcut/i.test(road.n || '')) penalty *= 2.5
+      return penalty
+    }
     for (const road of this.roads) {
       if (!road.p || road.p.length < 2) continue
       let prev = addNode(road.p[0][0], road.p[0][1])
       const oneWay = !!road.ow
       const oneWayBack = !!road.owb
+      const penalty = roadPenalty(road)
       for (let i = 1; i < road.p.length; i++) {
         const [x, z] = road.p[i]
         const next = addNode(x, z)
-        const w = dist2(road.p[i - 1][0], road.p[i - 1][1], x, z)
+        const w = dist2(road.p[i - 1][0], road.p[i - 1][1], x, z) * penalty
         const name = road.n || road.ref || ''
         const ref = road.ref || ''
         if (oneWay && !oneWayBack) addOneWay(prev, next, w, name, ref, road.t)

@@ -2329,6 +2329,59 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     detailBaseY = prevBase
   }
 
+  function addSunwayMedical() {
+    const p = data.sunway
+    if (!p) return
+    const prevBase = detailBaseY
+    const base = terrainAt(p.x, p.z)
+    detailBaseY = base
+    const near = frontRoadInfo(p.x, p.z)
+    let fx = 0
+    let fz = 1
+    if (near && near.dist > 0.25) {
+      fx = (near.cx - p.x) / near.dist
+      fz = (near.cz - p.z) / near.dist
+    }
+    const tx = -fz
+    const tz = fx
+    const yaw = Math.atan2(-tz, tx)
+    const at = (along, front) => [p.x + tx * along + fx * front, p.z + tz * along + fz * front]
+    const box = (along, front, y, sx, sy, sz, color) => {
+      const [x, z] = at(along, front)
+      addDetailBox(landmarkBatch, x, y, z, sx, sy, sz, yaw, color)
+    }
+    // Main hospital towers, set back from Jalan Lagoon Selatan.
+    box(-34, -17, 21, 20, 42, 18, '#d9dedb')
+    box(-34, -17, 44, 21, 2.5, 19, '#aeb8b6')
+    for (let i = 1; i <= 7; i++) box(-34, -17, i * 5, 20.2, 0.35, 18.2, '#78959a')
+    box(12, -34, 16, 18, 32, 16, '#e4e3da')
+    box(12, -34, 33, 19, 2, 17, '#aeb8b6')
+    for (let i = 1; i <= 5; i++) box(12, -34, i * 5, 18.2, 0.35, 16.2, '#78959a')
+    box(-2, -58, 10, 24, 20, 16, '#cfd6d2')
+    // Entrance canopy and lobby, facing the road.
+    box(-2, -8, 3.2, 18, 0.5, 7, '#e9e8df')
+    for (const along of [-8, 4]) box(along, -4, 1.6, 0.35, 3.2, 0.35, '#d4d7d2')
+    box(-2, -2, 2.5, 10, 4.8, 3.5, '#b7c5c4')
+    // Emergency / ambulance bay.
+    box(29, -11, 2.4, 12, 4.5, 8, '#c7d0ce')
+    box(29, -11, 4.6, 12.4, 0.35, 8.4, '#b23b3b')
+    // Main destination sign.
+    const [sx, sz] = at(-2, 5.6)
+    addSignBoard(
+      'SUNWAY MEDICAL CENTRE',
+      'HOSPITAL · 24 HOURS',
+      sx,
+      4.3,
+      sz,
+      Math.atan2(fx, fz),
+      13.5,
+      2.0,
+      { bg: '#1d4f78', fg: '#ffffff', accent: '#e34b4b', dark: '#122b3d', sub: 'HOSPITAL' },
+      true,
+    )
+    detailBaseY = prevBase
+  }
+
   function addParkingCars(batch, area) {
     if (area.p.length < 3) return
     let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity
@@ -2397,6 +2450,7 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
 
   // Fuel stations, pitches and POI signs are real OSM features.
   addNidoCampus()
+  addSunwayMedical()
   const sortedPois = (data.pois || []).slice().sort((a, b) => Math.hypot(a.x - data.spawn.x, a.z - data.spawn.z) - Math.hypot(b.x - data.spawn.x, b.z - data.spawn.z))
   for (const area of data.areas) {
     if (area.k === 'pitch' || area.k === 'stadium' || area.k === 'sports') {

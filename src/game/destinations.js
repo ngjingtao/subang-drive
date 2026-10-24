@@ -43,4 +43,16 @@ export const DESTINATIONS = [
     z: 886.5,
     color: '#3f8f9e',
   },
+  {
+    id: 'sunway',
+    name: 'Sunway Medical Centre',
+    sub: '5, Jalan Lagoon Selatan',
+    icon: '🏥',
+    x: 5574.9,
+    z: -1586.2,
+    routeX: 5575.7,
+    routeZ: -1549.4,
+    arriveRadius: 25,
+    color: '#e34b4b',
+  },
 ]
