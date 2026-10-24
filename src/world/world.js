@@ -2560,6 +2560,7 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
   /* ---------------- trees ---------------- */
   const treeData = []
   for (const t of data.trees) treeData.push({ x: t[0], z: t[1], s: t[2] })
+  for (const t of data.satTrees || []) treeData.push({ x: t[0], z: t[1], s: t[2] })
   for (const t of yardTrees) treeData.push(t)
 
   // USJ 3 is much leafier than the sparse OSM tree points. Put a deterministic
