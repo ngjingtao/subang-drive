@@ -2283,6 +2283,41 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     detailBaseY = prevBase
   }
 
+  function addParkingCars(batch, area) {
+    if (area.p.length < 3) return
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity
+    for (const [x, z] of area.p) {
+      minX = Math.min(minX, x); maxX = Math.max(maxX, x)
+      minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z)
+    }
+    if (maxX - minX < 3 || maxZ - minZ < 3) return
+    const inside = (x, z) => {
+      let hit = false
+      for (let i = 0, j = area.p.length - 1; i < area.p.length; j = i++) {
+        const [xi, zi] = area.p[i]
+        const [xj, zj] = area.p[j]
+        if (((zi > z) !== (zj > z)) && (x < (xj - xi) * (z - zi) / (zj - zi) + xi)) hit = !hit
+      }
+      return hit
+    }
+    const colors = ['#d8d8d3', '#a9b0b4', '#24282a', '#7a2f2a', '#e4e0d7', '#3d5666']
+    const prevBase = detailBaseY
+    detailBaseY = 0
+    let count = 0
+    for (let z = minZ + 2.5; z < maxZ - 2.5 && count < 9; z += 4.8) {
+      for (let x = minX + 2.2; x < maxX - 2.2 && count < 9; x += 3.0) {
+        if (!inside(x, z) || !inside(x - 1, z - 1) || !inside(x + 1, z + 1)) continue
+        if (hash2(x * 1.7, z * 2.3) > 0.66) continue
+        const y = terrainAt(x, z)
+        const yaw = hash2(x, z) > 0.5 ? 0 : Math.PI / 2
+        addDetailBox(batch, x, y + 0.43, z, 1.72, 0.62, 4.05, yaw, colors[Math.floor(hash2(z, x) * colors.length)])
+        addDetailBox(batch, x, y + 0.82, z - 0.15, 1.5, 0.34, 2.0, yaw, '#30383c')
+        count++
+      }
+    }
+    detailBaseY = prevBase
+  }
+
   function addChimney(x, z, height = 16, color = '#c9c6ba', baseY = 0) {
     const geo = new THREE.CylinderGeometry(0.55, 0.85, 1, 9)
     const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.85 })
@@ -2324,6 +2359,12 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
       detailBaseY = terrainAt(ax / area.p.length, az / area.p.length)
       addFootballField(landmarkBatch, area)
       detailBaseY = 0
+    } else if (area.k === 'parking') {
+      let ax = 0, az = 0
+      for (const [x, z] of area.p) { ax += x; az += z }
+      ax /= area.p.length
+      az /= area.p.length
+      if (routeDistanceAt(ax, az) < 220) addParkingCars(landmarkBatch, area)
     }
   }
 
@@ -2336,7 +2377,7 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
       fuelDone++
       continue
     }
-    if (d > 2600) continue
+    if (d > 2600 && routeDistanceAt(poi.x, poi.z) > 200) continue
     if (poi.k === 'school' && signLimits.school < 28) {
       placeRoadSign(poi, 'school', { w: 8.2, y: 3.3, posts: true, sub: 'SEKOLAH' })
       placeFacadeSign(poi, 'school', new Set(['school', 'kindergarten', 'university', 'college']), {
