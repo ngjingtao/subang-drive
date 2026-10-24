@@ -889,7 +889,12 @@ function terrainHeightAt(data, x, z) {
   const b = terrain.heights[i10]
   const c = terrain.heights[i01]
   const d = terrain.heights[i11]
-  return (a * (1 - tx) + b * tx) * (1 - tz) + (c * (1 - tx) + d * tx) * tz
+  // The terrain mesh splits each cell into triangles (a,c,b) and (b,c,d).
+  // Interpolate the same triangles here so roads, props and the car use the
+  // exact visible ground surface instead of a bilinear height that can sit
+  // below the rendered mesh on steeper parts of the DEM.
+  if (tx + tz <= 1) return a + (b - a) * tx + (c - a) * tz
+  return b * (1 - tz) + c * (1 - tx) + d * (tx + tz - 1)
 }
 
 function createTerrainMesh(data, grass) {
