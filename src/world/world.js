@@ -861,6 +861,117 @@ function findRoadOverlaps(buildings, roads, cell = 32) {
   return over
 }
 
+function terrainHeightAt(data, x, z) {
+  const terrain = data.terrain
+  if (!terrain || !terrain.heights) return 0
+  const res = terrain.res
+  const step = terrain.step
+  const minX = terrain.minX
+  const minZ = terrain.minZ
+  const fx = (x - minX) / step
+  const fz = (z - minZ) / step
+  const ix = Math.max(0, Math.min(res - 1, Math.floor(fx)))
+  const iz = Math.max(0, Math.min(res - 1, Math.floor(fz)))
+  const tx = Math.max(0, Math.min(1, fx - ix))
+  const tz = Math.max(0, Math.min(1, fz - iz))
+  const i00 = iz * res + ix
+  const i10 = iz * res + Math.min(res - 1, ix + 1)
+  const i01 = Math.min(res - 1, iz + 1) * res + ix
+  const i11 = Math.min(res - 1, iz + 1) * res + Math.min(res - 1, ix + 1)
+  const a = terrain.heights[i00]
+  const b = terrain.heights[i10]
+  const c = terrain.heights[i01]
+  const d = terrain.heights[i11]
+  return (a * (1 - tx) + b * tx) * (1 - tz) + (c * (1 - tx) + d * tx) * tz
+}
+
+function createTerrainMesh(data, grass) {
+  const terrain = data.terrain
+  if (!terrain || !terrain.heights) {
+    return new THREE.Mesh(
+      new THREE.PlaneGeometry(40000, 40000),
+      new THREE.MeshStandardMaterial({ map: grass, roughness: 1, color: 0xd8d8cf }),
+    )
+  }
+  const res = terrain.res
+  const step = terrain.step
+  const minX = terrain.minX
+  const minZ = terrain.minZ
+  const positions = new Float32Array(res * res * 3)
+  const uvs = new Float32Array(res * res * 2)
+  const colors = new Float32Array(res * res * 3)
+  const low = new THREE.Color('#d6ddc1')
+  const high = new THREE.Color('#cfc8b4')
+  const peak = new THREE.Color('#e2dccb')
+  for (let iz = 0; iz < res; iz++) {
+    for (let ix = 0; ix < res; ix++) {
+      const i = iz * res + ix
+      const x = minX + ix * step
+      const z = minZ + iz * step
+      const h = terrain.heights[i]
+      positions[i * 3] = x
+      positions[i * 3 + 1] = h
+      positions[i * 3 + 2] = z
+      uvs[i * 2] = (x - minX) / (res - 1)
+      uvs[i * 2 + 1] = (z - minZ) / (res - 1)
+      const t = Math.max(0, Math.min(1, h / 180))
+      const col = h > 110 ? low.clone().lerp(peak, Math.min(1, (h - 110) / 100)) : low.clone().lerp(high, t * 0.55)
+      colors[i * 3] = col.r
+      colors[i * 3 + 1] = col.g
+      colors[i * 3 + 2] = col.b
+    }
+  }
+  const indices = []
+  for (let iz = 0; iz < res - 1; iz++) {
+    for (let ix = 0; ix < res - 1; ix++) {
+      const a = iz * res + ix
+      const b = a + 1
+      const c = a + res
+      const d = c + 1
+      indices.push(a, c, b, b, c, d)
+    }
+  }
+  const geo = new THREE.BufferGeometry()
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+  geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2))
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+  geo.setIndex(indices)
+  geo.computeVertexNormals()
+  const mesh = new THREE.Mesh(
+    geo,
+    new THREE.MeshStandardMaterial({ map: grass, vertexColors: true, roughness: 1, color: 0xffffff, side: THREE.DoubleSide }),
+  )
+  mesh.receiveShadow = true
+  return mesh
+}
+
+function clipOuterRuns(points, radius = 4400) {
+  const runs = []
+  let cur = []
+  for (let i = 0; i < points.length; i++) {
+    const [x, z] = points[i]
+    const outside = Math.hypot(x, z) >= radius
+    if (outside) {
+      if (!cur.length && i > 0) cur.push(points[i - 1])
+      cur.push(points[i])
+    } else if (cur.length) {
+      cur.push(points[i])
+      if (cur.length >= 2) runs.push(cur)
+      cur = []
+    }
+  }
+  if (cur.length >= 2) runs.push(cur)
+  return runs.map((run) => {
+    const out = []
+    for (const [x, z] of run) {
+      if (!out.length || Math.hypot(x - out[out.length - 1][0], z - out[out.length - 1][1]) >= 6) {
+        out.push([x, z])
+      }
+    }
+    return out
+  }).filter((run) => run.length >= 2)
+}
+
 /* ------------------------------------------------------------------ */
 /* world                                                               */
 /* ------------------------------------------------------------------ */
@@ -874,17 +985,17 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
   const rng = mulberry32(20140411)
   const maxAniso = renderer.capabilities.getMaxAnisotropy()
   const bounds = data.meta.bounds
+  const terrainAt = (x, z) => terrainHeightAt(data, x, z)
 
-  /* ---------------- ground ---------------- */
+  /* ---------------- terrain ---------------- */
   const grass = grassTexture()
   grass.anisotropy = Math.min(8, maxAniso)
   grass.repeat.set(2000, 2000)
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(20000, 20000),
-    new THREE.MeshStandardMaterial({ map: grass, roughness: 1, color: 0xd8d8cf }),
-  )
-  ground.rotation.x = -Math.PI / 2
-  ground.position.y = -0.03
+  const ground = createTerrainMesh(data, grass)
+  if (!data.terrain) {
+    ground.rotation.x = -Math.PI / 2
+  }
+  ground.position.y = data.terrain ? 0 : -0.03
   ground.receiveShadow = true
   group.add(ground)
 
@@ -1030,7 +1141,7 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
   const bridgeProfiles = new Map()
   data.roads.forEach((road, index) => {
     const flyover = !flatBridges &&
-      road.b && !road.tn && road.p.length >= 2 && road.w >= 8.5 &&
+      !road.outer && road.b && !road.tn && road.p.length >= 2 && road.w >= 8.5 &&
       ['motorway', 'trunk', 'primary', 'secondary'].includes(road.t)
     if (flyover) bridgeProfiles.set(index, makeBridgeProfile(road))
   })
@@ -1106,6 +1217,8 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
       dist: n.dist,
       width: n.seg.w,
       angle: n.seg.angle,
+      name: data.roads[n.seg.ri]?.n || '',
+      ref: data.roads[n.seg.ri]?.ref || '',
     }
   }
 
@@ -1230,12 +1343,18 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     if (road.t === 'service' || road.t === 'raceway') return
     const extra = road.t === 'motorway' || road.t === 'trunk' ? 2.6 : 1.5
     const prof = bridgeProfiles.get(index)
-    const geo = prof
-      ? ribbon(prof.coords, road.w + extra, 0.05, 10, 0.4, prof.heights.map((h) => 0.05 + h - 0.016))
-      : ribbon(road.p, road.w + extra, 0.036, 10)
-    if (geo) {
-      setGeometryColor(geo, '#918d82')
-      shoulderGeos.push(geo)
+    const runs = road.outer ? clipOuterRuns(road.p) : [road.p]
+    for (const run of runs) {
+      const outerHeights = road.outer ? run.map(([x, z]) => 0.038 + terrainAt(x, z)) : null
+      const geo = prof
+        ? ribbon(prof.coords, road.w + extra, 0.05, 10, 0.4, prof.heights.map((h) => 0.05 + h - 0.016))
+        : outerHeights
+          ? ribbon(run, road.w + extra, 0.038, 10, 0.4, outerHeights)
+          : ribbon(run, road.w + extra, 0.036, 10)
+      if (geo) {
+        setGeometryColor(geo, '#918d82')
+        shoulderGeos.push(geo)
+      }
     }
   })
   if (shoulderGeos.length) {
@@ -1257,13 +1376,18 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     const lanes = plain ? 0 : lanesFor(road.w)
     const key = plain ? 'plain' : `r${lanes}`
     const prof = bridgeProfiles.get(index)
-    const geo = prof
-      ? ribbon(prof.coords, road.w, 0.05, 12, 0.4, prof.heights.map((h) => 0.05 + h))
-      : ribbon(road.p, road.w, 0.05, 12)
-    if (!geo) return
+    const runs = road.outer ? clipOuterRuns(road.p) : [road.p]
     let list = roadGroups.get(key)
     if (!list) roadGroups.set(key, (list = []))
-    list.push(geo)
+    for (const run of runs) {
+      const outerHeights = road.outer ? run.map(([x, z]) => 0.052 + terrainAt(x, z)) : null
+      const geo = prof
+        ? ribbon(prof.coords, road.w, 0.05, 12, 0.4, prof.heights.map((h) => 0.05 + h))
+        : outerHeights
+          ? ribbon(run, road.w, 0.052, 12, 0.4, outerHeights)
+          : ribbon(run, road.w, 0.05, 12)
+      if (geo) list.push(geo)
+    }
   })
 
   for (const [key, geos] of roadGroups) {
@@ -2191,6 +2315,68 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     structureGroup.add(cap)
   }
 
+  // Simplified outer-ring buildings: the detailed OSM core is within about
+  // 4–5 km of home, while the rest of the 20 km radius is represented by the
+  // real major road network and terrain. These low-poly blocks keep the outer
+  // suburbs from looking empty without loading hundreds of thousands of OSM
+  // building footprints.
+  const outerBatch = makeDetailBatch()
+  if (data.terrain) {
+    const outerRoads = data.roads.filter((r) => r.outer).slice()
+    for (let i = outerRoads.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1))
+      ;[outerRoads[i], outerRoads[j]] = [outerRoads[j], outerRoads[i]]
+    }
+    const townColors = ['#d8d1c3', '#c8c2b6', '#e0d9ca', '#bdb6a9', '#cfc2ad', '#d4cec2']
+    const townRoofs = ['#8b4f3e', '#7b4a3b', '#6c6660', '#84716a', '#5e5952']
+    let built = 0
+    const maxBuildings = mobile ? 6500 : 20000
+    for (const road of outerRoads) {
+      if (built >= maxBuildings) break
+      for (let i = 0; i < road.p.length - 1 && built < maxBuildings; i++) {
+        const a = road.p[i]
+        const b = road.p[i + 1]
+        const dx = b[0] - a[0]
+        const dz = b[1] - a[1]
+        const len = Math.hypot(dx, dz)
+        if (len < 30) continue
+        const nx = dz / len
+        const nz = -dx / len
+        let d = 45 + rng() * 40
+        while (d < len && built < maxBuildings) {
+          d += 65 + rng() * 55
+          const side = rng() > 0.5 ? 1 : -1
+          const off = 18 + rng() * 25
+          const x = a[0] + (dx * Math.min(1, d / len)) + nx * off * side
+          const z = a[1] + (dz * Math.min(1, d / len)) + nz * off * side
+          if (Math.hypot(x, z) < 4500) continue
+          const h = 3.4 + rng() * 5.6
+          const w = 6 + rng() * 10
+          const depth = 6 + rng() * 11
+          const y = terrainAt(x, z)
+          const yaw = Math.atan2(-dz, dx) + (rng() - 0.5) * 0.3
+          const wall = townColors[Math.floor(rng() * townColors.length)]
+          const roof = townRoofs[Math.floor(rng() * townRoofs.length)]
+          addDetailBox(outerBatch, x, y + h / 2, z, w, h, depth, yaw, wall)
+          addDetailBox(outerBatch, x, y + h + 0.1, z, w * 1.08, 0.2, depth * 1.08, yaw, roof)
+          built++
+        }
+      }
+    }
+  }
+  if (outerBatch.pos.length) {
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(outerBatch.pos, 3))
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(outerBatch.col, 3))
+    geo.computeVertexNormals()
+    const mesh = new THREE.Mesh(geo, detailMaterial)
+    mesh.castShadow = false
+    mesh.receiveShadow = true
+    group.add(mesh)
+    outerBatch.pos.length = 0
+    outerBatch.col.length = 0
+  }
+
   if (landmarkBatch.pos.length) {
     const geo = new THREE.BufferGeometry()
     geo.setAttribute('position', new THREE.Float32BufferAttribute(landmarkBatch.pos, 3))
@@ -2765,7 +2951,7 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     const lane = 1.45
     const px = x + fz * lane
     const pz = z - fx * lane
-    const h = bridgeHeightAt(px, pz, fx, fz)
+    const h = bridgeHeightAt(px, pz, fx, fz) + terrainHeightAt(data, px, pz)
     return { x: px, z: pz, y: h, fx, fz }
   }
 
@@ -2814,6 +3000,7 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     updateWater,
     waterAt,
     updateTraffic,
+    terrainHeightAt: terrainAt,
     updateCulling,
     stats: { buildings: data.buildings.length, trees: trees.length, lamps: lampPositions.length, chunks: buildingChunkList.length, traffic: trafficCars.length },
     windowUniforms,

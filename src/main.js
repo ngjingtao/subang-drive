@@ -68,9 +68,9 @@ renderer.shadowMap.enabled = true
 renderer.shadowMap.type = THREE.PCFSoftShadowMap
 
 const scene = new THREE.Scene()
-scene.fog = new THREE.Fog(0xcbd3cd, 320, 2500)
+scene.fog = new THREE.Fog(0xcbd3cd, 320, 15000)
 
-const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.045, 6500)
+const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.045, 35000)
 camera.rotation.order = 'YXZ'
 scene.add(camera)
 
@@ -318,8 +318,8 @@ function applyTime(index, { silent = false } = {}) {
   scene.environmentIntensity = 0.85
   renderer.toneMappingExposure = preset.exposure
   scene.fog.color.set(preset.fog.color)
-  scene.fog.near = preset.fog.near
-  scene.fog.far = preset.fog.far
+  scene.fog.near = Math.min(preset.fog.near, 700)
+  scene.fog.far = Math.max(preset.fog.far, 15000)
   hemi.color.set(preset.ambient.sky)
   hemi.groundColor.set(preset.ambient.ground)
   hemi.intensity = preset.ambient.intensity

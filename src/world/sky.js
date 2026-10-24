@@ -125,7 +125,7 @@ export class Sky {
       toneMapped: true,
     })
 
-    this.dome = new THREE.Mesh(new THREE.SphereGeometry(4500, 48, 24), this.material)
+    this.dome = new THREE.Mesh(new THREE.SphereGeometry(28000, 48, 24), this.material)
     this.dome.frustumCulled = false
     this.dome.renderOrder = -10
     this.group.add(this.dome)
@@ -139,7 +139,7 @@ export class Sky {
       const v = Math.random() * 0.95 + 0.02
       const theta = u * Math.PI * 2
       const phi = Math.acos(v)
-      const r = 4200
+      const r = 26000
       pos[i * 3] = Math.sin(phi) * Math.cos(theta) * r
       pos[i * 3 + 1] = Math.cos(phi) * r
       pos[i * 3 + 2] = Math.sin(phi) * Math.sin(theta) * r

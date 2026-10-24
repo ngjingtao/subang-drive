@@ -97,7 +97,9 @@ export class CarPhysics {
     }
 
     // surface drag / limits
+    const roadNear = world.nearestRoadInfo(this.x, this.z)
     this.onRoad = world.roadInfo.onRoad(this.x, this.z)
+    if (!this.onRoad && roadNear && roadNear.dist < roadNear.width / 2 + 1.4) this.onRoad = true
     if (!this.onRoad && Math.abs(this.speed) > 0.2) {
       this.speed -= Math.sign(this.speed) * Math.min(Math.abs(this.speed), 5.5 * dt)
     }
@@ -114,7 +116,6 @@ export class CarPhysics {
     // and change lanes, but a sharp turn / U-turn is only allowed near a
     // junction with a side road or at a traffic light.
     this.turnBlocked = false
-    const roadNear = world.nearestRoadInfo(this.x, this.z)
     if (roadNear && roadNear.dist < roadNear.width / 2 + 1.8) {
       // Directed road heading: track which way along this way we are riding.
       // A U-turn reverses that sign, which is only allowed at a junction or
@@ -214,8 +215,8 @@ export class CarPhysics {
     this.collideFlash = Math.max(0, this.collideFlash - dt * 2.2)
     const gridName = world.roadInfo.nameAt(this.x, this.z) || ''
     const gridRef = world.roadInfo.refAt(this.x, this.z) || ''
-    this.roadName = gridName
-    this.roadRef = gridRef
+    this.roadName = gridName || (roadNear ? roadNear.name : '')
+    this.roadRef = gridRef || (roadNear ? roadNear.ref : '')
 
     // Decide whether we are on top of a flyover or passing underneath it.
     // Direction matters: the 2-D bridge footprint also matches traffic on the
@@ -229,7 +230,8 @@ export class CarPhysics {
     // on the road underneath from being lifted onto the middle of a flyover.
     const canEnter = bridgeInfo.h < 2.2
     const onBridge = bridgeInfo.h > 0.05 && (wasUp || (bridgeRoad && canEnter))
-    this.roadY = onBridge ? bridgeInfo.h : 0
+    const groundY = world.terrainHeightAt ? world.terrainHeightAt(this.x, this.z) : 0
+    this.roadY = (onBridge ? bridgeInfo.h : 0) + groundY
     if (onBridge && bridgeInfo.name) {
       this.roadName = bridgeInfo.name
       this.roadRef = bridgeInfo.ref

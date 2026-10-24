@@ -9,8 +9,8 @@ export const DESTINATIONS = [
     name: 'Home',
     sub: '27, Jalan Pinggiran USJ 1/18',
     icon: '🏠',
-    x: 93.8,
-    z: -714.2,
+    x: 0,
+    z: 0,
     color: '#e8a23a',
   },
   {
@@ -18,8 +18,8 @@ export const DESTINATIONS = [
     name: 'Nido Child Care',
     sub: 'The Nido Early Learning & Childcare Centre',
     icon: '🧸',
-    x: 3202,
-    z: 756.3,
+    x: 3108.2,
+    z: 1470.5,
     color: '#e2557f',
   },
   {
@@ -27,8 +27,8 @@ export const DESTINATIONS = [
     name: 'USJ 3 Playground',
     sub: 'Taman USJ 3',
     icon: '🌳',
-    x: -131,
-    z: -144,
+    x: -224.8,
+    z: 570.2,
     color: '#45a06b',
   },
   {
@@ -36,8 +36,8 @@ export const DESTINATIONS = [
     name: 'USJ 9 Park',
     sub: 'USJ 9',
     icon: '🌳',
-    x: 2842,
-    z: 147,
+    x: 2748.2,
+    z: 861.2,
     color: '#3f8f9e',
   },
 ]
