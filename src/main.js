@@ -254,7 +254,7 @@ async function init() {
   physics.reset(world.spawn)
   if (world.terrainHeightAt) physics.roadY = world.terrainHeightAt(physics.x, physics.z)
 
-  minimap = new Minimap(data)
+  minimap = new Minimap(data, { mobile: isTouch })
   router = new RoadRouter(data.roads)
   router.build()
   initPhoneUi()

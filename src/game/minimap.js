@@ -42,49 +42,58 @@ const ROAD_COLORS = {
  * blue route line.
  */
 export class Minimap {
-  constructor(data) {
+  constructor(data, { mobile = false } = {}) {
     this.canvas = document.getElementById('phone-map')
     this.ctx = this.canvas.getContext('2d')
     this.data = data
     this.W = 360
     this.H = 640
-    this.canvas.width = this.W
-    this.canvas.height = this.H
-    this.size = 3072
-    this.bounds = data.meta.bounds
-    this.worldW = this.bounds.maxX - this.bounds.minX
-    this.worldH = this.bounds.maxZ - this.bounds.minZ
-    this.span = Math.max(this.worldW, this.worldH)
-    this.scale = this.size / this.span
-    this.offsetX = (this.size - this.worldW * this.scale) / 2
-    this.offsetY = (this.size - this.worldH * this.scale) / 2
-    this.viewMeters = 650
+    this.dpr = 2
+    this.canvas.width = this.W * this.dpr
+    this.canvas.height = this.H * this.dpr
+    this.viewMeters = 560
     this.nav = null
-    this.build()
+    this.full = this.buildMapCanvas(data.meta.bounds, mobile ? 1536 : 2048)
+    this.coreBounds = {
+      minX: -7000,
+      maxX: 7000,
+      minZ: -7000,
+      maxZ: 7000,
+    }
+    this.core = this.buildMapCanvas(this.coreBounds, mobile ? 3072 : 4096)
   }
 
+  // Kept for any external callers; the live map chooses the detailed core
+  // canvas or the low-resolution outer fallback in draw().
   toMap(x, z) {
-    return [
-      this.offsetX + (x - this.bounds.minX) * this.scale,
-      this.offsetY + (z - this.bounds.minZ) * this.scale,
-    ]
+    return this.full.toMap(x, z)
   }
 
-  build() {
+  buildMapCanvas(bounds, size) {
     const c = document.createElement('canvas')
-    c.width = this.size
-    c.height = this.size
+    c.width = size
+    c.height = size
     const ctx = c.getContext('2d')
+    const worldW = bounds.maxX - bounds.minX
+    const worldH = bounds.maxZ - bounds.minZ
+    const span = Math.max(worldW, worldH)
+    const scale = size / span
+    const offsetX = (size - worldW * scale) / 2
+    const offsetY = (size - worldH * scale) / 2
+    const toMap = (x, z) => [
+      offsetX + (x - bounds.minX) * scale,
+      offsetY + (z - bounds.minZ) * scale,
+    ]
 
     ctx.fillStyle = '#e9e7df'
-    ctx.fillRect(0, 0, this.size, this.size)
+    ctx.fillRect(0, 0, size, size)
 
     // land use
     for (const area of this.data.areas) {
       if (!area.p || area.p.length < 3) continue
       ctx.beginPath()
       for (let i = 0; i < area.p.length; i++) {
-        const [x, y] = this.toMap(area.p[i][0], area.p[i][1])
+        const [x, y] = toMap(area.p[i][0], area.p[i][1])
         if (i === 0) ctx.moveTo(x, y)
         else ctx.lineTo(x, y)
       }
@@ -100,35 +109,36 @@ export class Minimap {
       if (!path.p || path.p.length < 2) continue
       ctx.beginPath()
       for (let i = 0; i < path.p.length; i++) {
-        const [x, y] = this.toMap(path.p[i][0], path.p[i][1])
+        const [x, y] = toMap(path.p[i][0], path.p[i][1])
         if (i === 0) ctx.moveTo(x, y)
         else ctx.lineTo(x, y)
       }
       ctx.strokeStyle = path.t === 'railway' ? '#b9b3a7' : '#d8d2c5'
-      ctx.lineWidth = path.t === 'railway' ? 1.6 : 1.2
+      ctx.lineWidth = Math.max(0.15, (path.t === 'railway' ? 1.8 : 1.2) * scale * 6)
       ctx.stroke()
     }
 
-    // roads: casing then white/yellow fill
+    // roads: casing then white/yellow fill. Widths are in source pixels and
+    // scale with the canvas so the core map stays sharp when the phone zooms.
+    const roadWidth = (road) => Math.max(0.12, road.w * scale * 1.15)
     for (const road of this.data.roads) {
       if (!road.p || road.p.length < 2) continue
-      const width = Math.max(1.4, road.w * this.scale * 0.95)
-      this.strokeRoad(ctx, road.p, width + 2.0, 'rgba(177,170,157,0.55)')
+      const width = roadWidth(road)
+      this.strokeRoad(ctx, toMap, road.p, width + scale * 1.8, 'rgba(177,170,157,0.55)')
     }
     for (const road of this.data.roads) {
       if (!road.p || road.p.length < 2) continue
-      const width = Math.max(1.4, road.w * this.scale * 0.95)
-      this.strokeRoad(ctx, road.p, width, ROAD_COLORS[road.t] || '#ffffff')
+      this.strokeRoad(ctx, toMap, road.p, roadWidth(road), ROAD_COLORS[road.t] || '#ffffff')
     }
 
     // subtle edge vignette so the white map does not blow out
-    const vg = ctx.createRadialGradient(this.size / 2, this.size / 2, this.size * 0.2, this.size / 2, this.size / 2, this.size * 0.7)
+    const vg = ctx.createRadialGradient(size / 2, size / 2, size * 0.2, size / 2, size / 2, size * 0.7)
     vg.addColorStop(0, 'rgba(0,0,0,0)')
     vg.addColorStop(1, 'rgba(98,88,70,0.10)')
     ctx.fillStyle = vg
-    ctx.fillRect(0, 0, this.size, this.size)
+    ctx.fillRect(0, 0, size, size)
 
-    this.mapCanvas = c
+    return { canvas: c, bounds, size, scale, offsetX, offsetY, toMap }
   }
 
   drawHighwayShield(ctx, ref) {
@@ -157,10 +167,10 @@ export class Minimap {
     ctx.restore()
   }
 
-  strokeRoad(ctx, pts, width, color) {
+  strokeRoad(ctx, toMap, pts, width, color) {
     ctx.beginPath()
     for (let i = 0; i < pts.length; i++) {
-      const [x, y] = this.toMap(pts[i][0], pts[i][1])
+      const [x, y] = toMap(pts[i][0], pts[i][1])
       if (i === 0) ctx.moveTo(x, y)
       else ctx.lineTo(x, y)
     }
@@ -177,15 +187,19 @@ export class Minimap {
     const ctx = this.ctx
     const W = this.W
     const H = this.H
-    const [carX, carY] = this.toMap(state.x, state.z)
+    const b = this.coreBounds
+    const useCore = state.x >= b.minX && state.x <= b.maxX && state.z >= b.minZ && state.z <= b.maxZ
+    const map = useCore ? this.core : this.full
+    const mapPoint = map.toMap
+    const [carX, carY] = mapPoint(state.x, state.z)
     const cx = W / 2
     const cy = H * 0.46
-    const srcW = this.viewMeters * this.scale
+    const srcW = this.viewMeters * map.scale
     const k = W / srcW
     const D = Math.hypot(W, H) * 1.10
     const srcSize = D / k
 
-    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0)
     ctx.clearRect(0, 0, W, H)
     ctx.fillStyle = '#e9e7df'
     ctx.fillRect(0, 0, W, H)
@@ -194,8 +208,9 @@ export class Minimap {
     ctx.translate(cx, cy)
     ctx.rotate(state.yaw)
     ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
     ctx.drawImage(
-      this.mapCanvas,
+      map.canvas,
       carX - srcSize / 2,
       carY - srcSize / 2,
       srcSize,
@@ -210,8 +225,8 @@ export class Minimap {
       const pts = nav.route.points
       ctx.beginPath()
       for (let i = 0; i < pts.length; i++) {
-        const x = (this.toMap(pts[i].x, pts[i].z)[0] - carX) * k
-        const y = (this.toMap(pts[i].x, pts[i].z)[1] - carY) * k
+        const x = (mapPoint(pts[i].x, pts[i].z)[0] - carX) * k
+        const y = (mapPoint(pts[i].x, pts[i].z)[1] - carY) * k
         if (i === 0) ctx.moveTo(x, y)
         else ctx.lineTo(x, y)
       }
@@ -229,7 +244,7 @@ export class Minimap {
     // destination pin, upright and not rotated with the map
     let destScreen = null
     if (nav && nav.dest) {
-      const [dxm, dym] = this.toMap(nav.dest.x, nav.dest.z)
+      const [dxm, dym] = mapPoint(nav.dest.x, nav.dest.z)
       const dx = (dxm - carX) * k
       const dy = (dym - carY) * k
       const cos = Math.cos(state.yaw)
@@ -306,7 +321,7 @@ export class Minimap {
         if (d < bestD) { bestD = d; best = [sxw, szw] }
       }
       if (best) {
-        const [sxm, sym] = this.toMap(best[0], best[1])
+        const [sxm, sym] = mapPoint(best[0], best[1])
         const dx = (sxm - carX) * k
         const dy = (sym - carY) * k
         const cos = Math.cos(state.yaw)

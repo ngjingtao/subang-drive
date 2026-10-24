@@ -1,5 +1,5 @@
 /* Subang Drive — offline shell + runtime cache */
-const CACHE = 'subang-drive-v31'
+const CACHE = 'subang-drive-v32'
 const BASE = self.registration.scope
 const SHELL = BASE
 
