@@ -2,9 +2,12 @@ import * as THREE from 'three'
 
 const WHEELBASE = 2.55
 const WHEEL_RADIUS = 0.305
-const MAX_SPEED = 51 // m/s ≈ 184 km/h
-const MAX_REVERSE = 10
-const GEAR_TOPS = [28, 58, 96, 136, 190] // km/h upper bound of each gear
+const MAX_SPEED = 50 // m/s = 180 km/h, the real 2014 Vios 1.5 top speed
+const MAX_REVERSE = 8.5 // m/s ≈ 31 km/h
+const GEAR_TOPS = [52, 95, 140, 180] // km/h shifts for the 4-speed automatic
+const ENGINE_ACCEL = 3.3 // m/s² at crawl; gives a realistic ~11 s 0–100 km/h
+const ENGINE_CURVE = 0.8 // power tails off towards the 180 km/h limiter
+const BRAKE_DECEL = 11.5 // m/s², closer to the Vios' road brakes
 
 export class CarPhysics {
   constructor(spawn) {
@@ -75,13 +78,13 @@ export class CarPhysics {
 
     // engine / brakes
     if (throttle > 0.01) {
-      const curve = Math.pow(Math.max(0, 1 - Math.max(0, this.speed) / MAX_SPEED), 0.62)
-      const power = this.speed < -0.2 ? 12 : 8.6
+      const curve = Math.pow(Math.max(0, 1 - Math.max(0, this.speed) / MAX_SPEED), ENGINE_CURVE)
+      const power = this.speed < -0.2 ? 4.8 : ENGINE_ACCEL
       this.speed += power * throttle * curve * dt
     }
     if (brake > 0.01) {
       if (this.speed > 0.4) {
-        this.speed -= 15.5 * brake * dt
+        this.speed -= BRAKE_DECEL * brake * dt
         if (this.speed < 0) this.speed = 0
       } else if (throttle < 0.05) {
         this.speed -= 4.6 * brake * dt
