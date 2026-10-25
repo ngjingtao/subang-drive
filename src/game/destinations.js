@@ -50,9 +50,9 @@ export const DESTINATIONS = [
     icon: '🏥',
     x: 5574.9,
     z: -1586.2,
-    routeX: 5575.7,
-    routeZ: -1549.4,
-    arriveRadius: 25,
+    routeX: 5574.9,
+    routeZ: -1586.2,
+    arriveRadius: 8,
     color: '#e34b4b',
   },
 ]
