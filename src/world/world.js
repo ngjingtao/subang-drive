@@ -2617,7 +2617,39 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
   // suburbs from looking empty without loading hundreds of thousands of OSM
   // building footprints.
   const outerBatch = makeDetailBatch()
+  // Outer blocks use absolute terrain heights; make sure no landmark detail
+  // offset leaks in here, otherwise the whole outer city floats above ground.
+  detailBaseY = 0
   if (data.terrain) {
+    // Spatial lookup for the real OSM core, so outer LOD blocks fill the
+    // gaps without being dropped on top of detailed buildings.
+    const detailedCells = new Map()
+    const DETAIL_CELL = 64
+    for (const b of data.buildings) {
+      let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity
+      for (const [x, z] of b.p) {
+        if (x < minX) minX = x
+        if (x > maxX) maxX = x
+        if (z < minZ) minZ = z
+        if (z > maxZ) maxZ = z
+      }
+      for (let gx = Math.floor(minX / DETAIL_CELL); gx <= Math.floor(maxX / DETAIL_CELL); gx++) {
+        for (let gz = Math.floor(minZ / DETAIL_CELL); gz <= Math.floor(maxZ / DETAIL_CELL); gz++) {
+          const k = `${gx},${gz}`
+          let list = detailedCells.get(k)
+          if (!list) detailedCells.set(k, (list = []))
+          list.push([minX, maxX, minZ, maxZ])
+        }
+      }
+    }
+    const nearDetailedBuilding = (x, z, radius = 28) => {
+      const list = detailedCells.get(`${Math.floor(x / DETAIL_CELL)},${Math.floor(z / DETAIL_CELL)}`)
+      if (!list) return false
+      for (const [minX, maxX, minZ, maxZ] of list) {
+        if (x > minX - radius && x < maxX + radius && z > minZ - radius && z < maxZ + radius) return true
+      }
+      return false
+    }
     const outerRoads = data.roads.filter((r) => r.outer).slice()
     for (let i = outerRoads.length - 1; i > 0; i--) {
       const j = Math.floor(rng() * (i + 1))
@@ -2626,7 +2658,137 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     const townColors = ['#d8d1c3', '#c8c2b6', '#e0d9ca', '#bdb6a9', '#cfc2ad', '#d4cec2']
     const townRoofs = ['#8b4f3e', '#7b4a3b', '#6c6660', '#84716a', '#5e5952']
     let built = 0
-    const maxBuildings = mobile ? 6500 : 20000
+    const maxBuildings = mobile ? 9000 : 30000
+    const addTownBlock = (x, z, yaw) => {
+      const h = 3.4 + rng() * 5.6
+      const w = 6 + rng() * 10
+      const depth = 6 + rng() * 11
+      const y = terrainAt(x, z)
+      const wall = townColors[Math.floor(rng() * townColors.length)]
+      const roof = townRoofs[Math.floor(rng() * townRoofs.length)]
+      addDetailBox(outerBatch, x, y + h / 2, z, w, h, depth, yaw, wall)
+      addDetailBox(outerBatch, x, y + h + 0.1, z, w * 1.08, 0.2, depth * 1.08, yaw, roof)
+      built++
+    }
+
+    // Give the complete Sunway route a proper built-up corridor first, even
+    // where the outer LOD has no OSM footprints. This is what keeps the long
+    // 20 km drive from turning into an empty green field.
+    const sunwayRoute = Array.isArray(data.sunwayRoute) ? data.sunwayRoute : []
+    for (let i = 0; i < sunwayRoute.length - 1 && built < maxBuildings; i++) {
+      const [ax, az] = sunwayRoute[i]
+      const [bx, bz] = sunwayRoute[i + 1]
+      const dx = bx - ax
+      const dz = bz - az
+      const len = Math.hypot(dx, dz)
+      if (len < 8) continue
+      const nx = dz / len
+      const nz = -dx / len
+      const yaw = Math.atan2(-dz, dx)
+      for (let d = 18; d < len && built < maxBuildings; d += 46) {
+        const t = d / len
+        const cx = ax + dx * t
+        const cz = az + dz * t
+        for (const side of [-1, 1]) {
+          if (built >= maxBuildings) break
+          const off = 22 + rng() * 18
+          const x = cx + nx * off * side
+          const z = cz + nz * off * side
+          if (nearDetailedBuilding(x, z, 30)) continue
+          if (data.nido && Math.hypot(x - data.nido.x, z - data.nido.z) < 55) continue
+          if (data.sunway && Math.hypot(x - data.sunway.x, z - data.sunway.z) < 120) continue
+          addTownBlock(x, z, yaw + (rng() - 0.5) * 0.25)
+        }
+      }
+    }
+    // Wider frontage rows keep the corridor visibly built up even through
+    // the interchange/field sections where the nearest-road test would
+    // otherwise suppress every block.
+    for (let i = 0; i < sunwayRoute.length - 1 && built < maxBuildings; i++) {
+      const [ax, az] = sunwayRoute[i]
+      const [bx, bz] = sunwayRoute[i + 1]
+      const dx = bx - ax
+      const dz = bz - az
+      const len = Math.hypot(dx, dz)
+      if (len < 8) continue
+      const nx = dz / len
+      const nz = -dx / len
+      const yaw = Math.atan2(-dz, dx)
+      for (let d = 16; d < len && built < maxBuildings; d += 34) {
+        const t = d / len
+        const cx = ax + dx * t
+        const cz = az + dz * t
+        for (const side of [-1, 1]) {
+          if (built >= maxBuildings) break
+          const off = 30 + rng() * 25
+          const x = cx + nx * off * side
+          const z = cz + nz * off * side
+          if (nearDetailedBuilding(x, z, 28)) continue
+          if (data.nido && Math.hypot(x - data.nido.x, z - data.nido.z) < 60) continue
+          if (data.sunway && Math.hypot(x - data.sunway.x, z - data.sunway.z) < 120) continue
+          addTownBlock(x, z, yaw + (rng() - 0.5) * 0.2)
+        }
+      }
+    }
+
+    // Dense frontage rows for the Sunway corridor: even where OSM has no
+    // footprints, the road should read as a built-up suburban route.
+    for (let i = 0; i < sunwayRoute.length - 1 && built < maxBuildings; i++) {
+      const [ax, az] = sunwayRoute[i]
+      const [bx, bz] = sunwayRoute[i + 1]
+      const dx = bx - ax
+      const dz = bz - az
+      const len = Math.hypot(dx, dz)
+      if (len < 8) continue
+      const nx = dz / len
+      const nz = -dx / len
+      const yaw = Math.atan2(-dz, dx)
+      for (let d = 10; d < len && built < maxBuildings; d += 24) {
+        const t = d / len
+        const cx = ax + dx * t
+        const cz = az + dz * t
+        for (const side of [-1, 1]) {
+          if (built >= maxBuildings) break
+          const off = 13 + rng() * 12
+          const x = cx + nx * off * side
+          const z = cz + nz * off * side
+          if (nearDetailedBuilding(x, z, 26)) continue
+          if (data.nido && Math.hypot(x - data.nido.x, z - data.nido.z) < 55) continue
+          if (data.sunway && Math.hypot(x - data.sunway.x, z - data.sunway.z) < 110) continue
+          const near = nearestRoadInfo(x, z)
+          if (near && near.dist < near.width / 2 + 5) continue
+          addTownBlock(x, z, yaw + (rng() - 0.5) * 0.2)
+        }
+      }
+    }
+
+    // Fill the remaining 20 km ring with low-poly town blocks. The detailed
+    // OSM core is excluded by the building lookup; the grid keeps the outer
+    // world from reading as empty green terrain between major roads.
+    const waterAreas = data.areas.filter((a) => a.k === 'water')
+    const fillStep = mobile ? 190 : 125
+    const fillCap = mobile ? 5500 : 18000
+    let filled = 0
+    for (let gx = -20000; gx <= 20000 && filled < fillCap && built < maxBuildings; gx += fillStep) {
+      for (let gz = -20000; gz <= 20000 && filled < fillCap && built < maxBuildings; gz += fillStep) {
+        const jitterX = (hash2(gx * 0.013, gz * 0.021) - 0.5) * fillStep * 0.55
+        const jitterZ = (hash2(gz * 0.017, gx * 0.011) - 0.5) * fillStep * 0.55
+        const x = gx + jitterX
+        const z = gz + jitterZ
+        const dist = Math.hypot(x, z)
+        if (dist > 20000) continue
+        if (nearDetailedBuilding(x, z, 34)) continue
+        if (data.nido && Math.hypot(x - data.nido.x, z - data.nido.z) < 65) continue
+        if (data.sunway && Math.hypot(x - data.sunway.x, z - data.sunway.z) < 130) continue
+        const near = nearestRoadInfo(x, z)
+        if (near && near.dist < near.width / 2 + 8) continue
+        if (waterAreas.some((a) => pointInPolygon(x, z, a.p))) continue
+        const chance = dist < 4500 ? 0.24 : 0.48
+        if (hash2(x * 0.37, z * 0.29) > chance) continue
+        addTownBlock(x, z, hash2(x, z) * Math.PI * 2)
+        filled++
+      }
+    }
     for (const road of outerRoads) {
       if (built >= maxBuildings) break
       for (let i = 0; i < road.p.length - 1 && built < maxBuildings; i++) {
@@ -2645,17 +2807,11 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
           const off = 18 + rng() * 25
           const x = a[0] + (dx * Math.min(1, d / len)) + nx * off * side
           const z = a[1] + (dz * Math.min(1, d / len)) + nz * off * side
-          if (Math.hypot(x, z) < 4500) continue
-          const h = 3.4 + rng() * 5.6
-          const w = 6 + rng() * 10
-          const depth = 6 + rng() * 11
-          const y = terrainAt(x, z)
+          if (nearDetailedBuilding(x, z, 28)) continue
+          if (data.nido && Math.hypot(x - data.nido.x, z - data.nido.z) < 55) continue
+          if (data.sunway && Math.hypot(x - data.sunway.x, z - data.sunway.z) < 90) continue
           const yaw = Math.atan2(-dz, dx) + (rng() - 0.5) * 0.3
-          const wall = townColors[Math.floor(rng() * townColors.length)]
-          const roof = townRoofs[Math.floor(rng() * townRoofs.length)]
-          addDetailBox(outerBatch, x, y + h / 2, z, w, h, depth, yaw, wall)
-          addDetailBox(outerBatch, x, y + h + 0.1, z, w * 1.08, 0.2, depth * 1.08, yaw, roof)
-          built++
+          addTownBlock(x, z, yaw)
         }
       }
     }
