@@ -1,5 +1,5 @@
 /* Subang Drive — offline shell + runtime cache */
-const CACHE = 'subang-drive-v38'
+const CACHE = 'subang-drive-v39'
 const BASE = self.registration.scope
 const SHELL = BASE
 
@@ -8,7 +8,6 @@ async function precache() {
   const urls = new Set([
     SHELL,
     BASE + 'manifest.webmanifest',
-    BASE + 'data/subang-jaya.json',
     BASE + 'icons/icon-192.png',
     BASE + 'icons/icon-512.png',
     BASE + 'icons/apple-touch-icon.png',
@@ -44,6 +43,13 @@ self.addEventListener('fetch', (event) => {
   let url
   try { url = new URL(req.url) } catch { return }
   if (url.origin !== self.location.origin) return
+
+  if (url.pathname.endsWith('/data/subang-jaya.json')) {
+    // The map is now a large 20 km OSM extract. Let the HTTP cache handle it
+    // instead of filling CacheStorage with a single multi-megabyte entry.
+    event.respondWith(fetch(req))
+    return
+  }
 
   if (req.mode === 'navigate') {
     event.respondWith(

@@ -106,7 +106,9 @@ export class CarPhysics {
     this.onRoad = world.roadInfo.onRoad(this.x, this.z)
     if (!this.onRoad && roadNear && roadNear.dist < roadNear.width / 2 + 1.4) this.onRoad = true
     if (!this.onRoad && Math.abs(this.speed) > 0.2) {
-      this.speed -= Math.sign(this.speed) * Math.min(Math.abs(this.speed), 5.5 * dt)
+      // Grass should slow the car, not pin it: engine acceleration must be
+      // able to overcome the off-road drag and let the driver recover.
+      this.speed -= Math.sign(this.speed) * Math.min(Math.abs(this.speed), 1.7 * dt)
     }
     this.speed = THREE.MathUtils.clamp(this.speed, -MAX_REVERSE, MAX_SPEED)
 
@@ -227,10 +229,20 @@ export class CarPhysics {
     // Direction matters: the 2-D bridge footprint also matches traffic on the
     // road crossing below. Only follow a deck when the car is heading along
     // that deck and is either still up there or already on the bridge road.
-    const bridgeInfo = world.bridgeInfoAt(this.x, this.z, fx, fz)
+    let bridgeInfo = world.bridgeInfoAt(this.x, this.z, fx, fz)
+    const wasUp = this.bridgeY > 0.3
+    // At a curved ramp or a tiny footprint gap the heading-filtered lookup can
+    // briefly miss the deck. If we are already up on a flyover, fall back to a
+    // position-only lookup so the car does not teleport down to the ground.
+    if (wasUp) {
+      // Pick the highest overlapping deck while already elevated. A lower
+      // parallel bridge underneath must not pull the car down through a
+      // flyover.
+      const deck = world.bridgeInfoAt(this.x, this.z, 0, 0, true)
+      if (deck.h > bridgeInfo.h + 0.2) bridgeInfo = deck
+    }
     const nearRoad = world.nearestRoadInfo(this.x, this.z)
     const bridgeRoad = nearRoad && bridgeInfo.roadIndex >= 0 && nearRoad.roadIndex === bridgeInfo.roadIndex
-    const wasUp = this.bridgeY > 0.3
     // Enter a deck only at its ramp, then keep following it. This stops a car
     // on the road underneath from being lifted onto the middle of a flyover.
     const canEnter = bridgeInfo.h < 2.2
