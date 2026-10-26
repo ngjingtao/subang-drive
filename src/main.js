@@ -169,7 +169,7 @@ async function init() {
 
   let data
   try {
-    const res = await fetch(`${import.meta.env.BASE_URL}data/subang-jaya.json`)
+    const res = await fetch(`${import.meta.env.BASE_URL}data/subang-jaya.json?v=20261026-real-20km`)
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     data = await res.json()
   } catch (err) {
