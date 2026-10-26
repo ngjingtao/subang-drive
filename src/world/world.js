@@ -1418,13 +1418,18 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     if (road.t === 'service' || road.t === 'raceway') return
     const extra = road.t === 'motorway' || road.t === 'trunk' ? 2.6 : 1.5
     const prof = bridgeProfiles.get(index)
-    const runs = road.outer ? clipOuterRuns(road.p) : [road.p]
+    // Outer-ring roads must still render inside the detailed core: the
+    // router can legitimately use an outer-only motorway link near the core
+    // boundary. Keep them slightly below core roads so duplicates do not
+    // z-fight, but never remove the only visible copy of a road.
+    const drop = road.outer ? 0.017 : 0
+    const runs = [road.p]
     for (const run of runs) {
       const pts = resamplePolyline(run, 6).points.map((p) => [p.x, p.z])
-      const shoulderHeights = terrainEdgeHeights(pts, road.w + extra, 0.038, terrainAt)
+      const shoulderHeights = terrainEdgeHeights(pts, road.w + extra, 0.038 - drop, terrainAt)
       const geo = prof
-        ? ribbon(prof.coords, road.w + extra, 0.05, 10, 0.4, prof.heights.map((h, i) => 0.05 + h - 0.016 + terrainAt(prof.coords[i][0], prof.coords[i][1])))
-        : ribbon(pts, road.w + extra, 0.038, 10, 0.4, shoulderHeights)
+        ? ribbon(prof.coords, road.w + extra, 0.05 - drop, 10, 0.4, prof.heights.map((h, i) => 0.05 - drop + h - 0.016 + terrainAt(prof.coords[i][0], prof.coords[i][1])))
+        : ribbon(pts, road.w + extra, 0.038 - drop, 10, 0.4, shoulderHeights)
       if (geo) {
         setGeometryColor(geo, '#918d82')
         shoulderGeos.push(geo)
@@ -1450,15 +1455,16 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     const lanes = plain ? 0 : lanesFor(road.w)
     const key = plain ? 'plain' : `r${lanes}`
     const prof = bridgeProfiles.get(index)
-    const runs = road.outer ? clipOuterRuns(road.p) : [road.p]
+    const drop = road.outer ? 0.017 : 0
+    const runs = [road.p]
     let list = roadGroups.get(key)
     if (!list) roadGroups.set(key, (list = []))
     for (const run of runs) {
       const pts = resamplePolyline(run, 6).points.map((p) => [p.x, p.z])
-      const roadHeights = terrainEdgeHeights(pts, road.w, 0.052, terrainAt)
+      const roadHeights = terrainEdgeHeights(pts, road.w, 0.052 - drop, terrainAt)
       const geo = prof
-        ? ribbon(prof.coords, road.w, 0.05, 12, 0.4, prof.heights.map((h, i) => 0.05 + h + terrainAt(prof.coords[i][0], prof.coords[i][1])))
-        : ribbon(pts, road.w, 0.052, 12, 0.4, roadHeights)
+        ? ribbon(prof.coords, road.w, 0.05 - drop, 12, 0.4, prof.heights.map((h, i) => 0.05 - drop + h + terrainAt(prof.coords[i][0], prof.coords[i][1])))
+        : ribbon(pts, road.w, 0.052 - drop, 12, 0.4, roadHeights)
       if (geo) list.push(geo)
     }
   })
