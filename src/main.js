@@ -169,9 +169,17 @@ async function init() {
 
   let data
   try {
-    const res = await fetch(`${import.meta.env.BASE_URL}data/subang-jaya.json?v=20261026-real-20km`)
+    const res = await fetch(`${import.meta.env.BASE_URL}data/subang-jaya.json?v=20261027-real-20km`)
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     data = await res.json()
+    // Outer building footprints live in a compact binary file; the core JSON
+    // stays small enough to load reliably on mobile and slower connections.
+    try {
+      const outer = await fetch(`${import.meta.env.BASE_URL}data/outer-buildings.bin?v=20261027-real-20km`)
+      if (outer.ok) data.outerBuildings = new Int16Array(await outer.arrayBuffer())
+    } catch (err) {
+      console.warn('Outer building layer unavailable', err)
+    }
   } catch (err) {
     setProgress(100, 'Peta gagal dimuatkan. Sila jalankan "npm run map".')
     console.error(err)

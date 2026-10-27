@@ -2619,9 +2619,10 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
   // building footprints.
   // Real outer-ring building footprints from the 20 km OSM extract. No
   // randomly invented blocks are generated here.
-  const outerBuildings = Array.isArray(data.outerBuildings) ? data.outerBuildings : []
-  if (outerBuildings.length) {
-    const count = mobile ? Math.min(120000, outerBuildings.length) : outerBuildings.length
+  const outerBuildings = data.outerBuildings && data.outerBuildings.length ? data.outerBuildings : null
+  if (outerBuildings) {
+    const total = Math.floor(outerBuildings.length / 5)
+    const count = mobile ? Math.min(120000, total) : total
     const bodyGeo = new THREE.BoxGeometry(1, 1, 1)
     const roofGeo = new THREE.BoxGeometry(1, 1, 1)
     const bodyMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.93, metalness: 0.01 })
@@ -2637,7 +2638,12 @@ export function buildWorld(scene, data, renderer, { mobile = false } = {}) {
     const walls = ['#d8d1c3', '#c8c2b6', '#e0d9ca', '#bdb6a9', '#cfc2ad', '#d4cec2', '#e6e2d8']
     const roofColors = ['#8b4f3e', '#7b4a3b', '#6c6660', '#84716a', '#5e5952', '#9a5b48', '#6e7470']
     for (let i = 0; i < count; i++) {
-      const [x, z, w, d, h] = outerBuildings[i]
+      const o = i * 5
+      const x = outerBuildings[o]
+      const z = outerBuildings[o + 1]
+      const w = outerBuildings[o + 2]
+      const d = outerBuildings[o + 3]
+      const h = outerBuildings[o + 4]
       const y = terrainAt(x, z)
       const yaw = hash2(x, z) * Math.PI * 2
       q.setFromAxisAngle(up, yaw)

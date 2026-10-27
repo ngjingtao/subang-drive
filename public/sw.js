@@ -1,5 +1,5 @@
 /* Subang Drive — offline shell + runtime cache */
-const CACHE = 'subang-drive-v40'
+const CACHE = 'subang-drive-v41'
 const BASE = self.registration.scope
 const SHELL = BASE
 
@@ -44,7 +44,7 @@ self.addEventListener('fetch', (event) => {
   try { url = new URL(req.url) } catch { return }
   if (url.origin !== self.location.origin) return
 
-  if (url.pathname.endsWith('/data/subang-jaya.json')) {
+  if (url.pathname.endsWith('/data/subang-jaya.json') || url.pathname.endsWith('/data/outer-buildings.bin')) {
     // The map is now a large 20 km OSM extract. Let the HTTP cache handle it
     // instead of filling CacheStorage with a single multi-megabyte entry.
     event.respondWith(fetch(req))
